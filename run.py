@@ -65,7 +65,7 @@ def load_log_config(path):
         'loggers': {
             '': {
                 'handlers': ['file', 'console'],
-                'level': 'INFO',
+                'level': 'INFO',  # Set to DEBUG to show all logs, or INFO
                 'propagate': True,
             },
         }
@@ -87,9 +87,14 @@ class IndexHandler(BaseReqHandler):
         self.render("index.html")
 
 
-def run(host='127.0.0.1', port=8282, debug=True, wav_dir=os.path.join(os.path.dirname(__file__), "wavs")):
+def run(host='127.0.0.1', port=8282, debug=True, wav_dir=os.path.join(os.path.dirname(__file__), "wavs"), reference_dir=None, inventory_file_path=None, save_dir=None, info_dir=None, json_suffix=None):
     settings = {
-        "wav_dir": wav_dir
+        "wav_dir": wav_dir,
+        "info_dir": info_dir,
+        "reference_dir": reference_dir,
+        "inventory_file_path": inventory_file_path,
+        "save_dir": save_dir,
+        "json_suffix": json_suffix,
     }
 
     _app = Application([
@@ -117,22 +122,31 @@ def main():
                         help='host, 0.0.0.0 代表外网可以访问')
     parser.add_argument('-p', "--port", default=8282, type=int,
                         help='port')
-    parser.add_argument("-d", "--debug", default=False, type=bool,
+    parser.add_argument("-d", "--debug", default=True, type=bool,
                         help='debug')
     parser.add_argument("-l", "--log_config_file", default=log_dir,
                         help='log config file, json')
-    parser.add_argument("--wav_dir", "-w", default=os.path.join(os.path.dirname(__file__), "wavs"),
-                        help='待标注的wav文件夹')
+    parser.add_argument("-w", "--wav_dir", default=os.path.join(os.path.dirname(__file__), "wavs"),
+                        help='audio files with kaldi format info: utt2spk, spk2utt, wav.scp, text')
+    parser.add_argument("-r", "--reference_dir", default='',
+                        help='the reference list for the audio file list want to label')
+    parser.add_argument("-s", "--save_dir", default=os.path.join(os.path.dirname(__file__), "save_json"))
+    parser.add_argument("-f", "--info_dir", default=os.path.join(os.path.dirname(__file__), "info"))
+    parser.add_argument("-t", "--json_suffix", default="label")
+    
+    parser.add_argument("-i", "--inventory_file_path", default=os.path.join(os.path.dirname(__file__), "/home/jtlee/projects/MDD/Peppanet/data/lang_39phn/phn_42_units.txt"))
+
     args = parser.parse_args()
-    print(args)
 
     os.makedirs('logs', exist_ok=True)
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir)
+
     load_log_config(args.log_config_file)
     logger = logging.getLogger("root")
-    # 将host设置为0.0.0.0，则外网用户也可以访问到这个服务
-    logger.info("%s,%d,%s", args.host, args.port, args.debug)
+    logger.info("ADDRESS http://%s:%d, DEBUG %s", args.host, args.port, args.debug)
 
-    run(host=args.host, port=args.port, debug=args.debug, wav_dir=args.wav_dir)
+    run(host=args.host, port=args.port, debug=args.debug, wav_dir=args.wav_dir, reference_dir=args.reference_dir, inventory_file_path=args.inventory_file_path, save_dir=args.save_dir, info_dir=args.info_dir, json_suffix=args.json_suffix)
 
 
 if __name__ == "__main__":

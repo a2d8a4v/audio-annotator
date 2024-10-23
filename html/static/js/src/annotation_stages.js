@@ -6,6 +6,15 @@
  * Dependencies:
  *   jQuey, audio-annotator.css
  */
+
+function splitStringIfCommaExists(inputString) {
+    if (inputString.includes(',')) {
+        return inputString.split(',').map(item => item.trim()).filter(item => item !== ''); // Filter out empty elements // Split and remove any extra spaces
+    } else {
+        return [inputString]; // Return the string as an array if no comma is present
+    }
+}
+
 function StageOneView() {
     this.dom = null;
 }
@@ -27,9 +36,11 @@ StageOneView.prototype = {
 
         var time = Util.createSegmentTime();
 
-        time.hide();
+        // time.hide();
 
-        this.dom = container.append([time]);
+        var content = ShowContent.createShowContent();
+
+        this.dom = container.append([content, time]);
     },
 
     // Update start and end times. Enable the 'CLICK TO START A NEW ANNOTATION' if the audio is playing
@@ -67,7 +78,9 @@ StageTwoView.prototype = {
 
         var time = Util.createSegmentTime();
         
-        this.dom = container.append([button, time]);
+        var content = ShowContent.createShowContent();
+
+        this.dom = container.append([button, content, time]);
     },
 
     // Update start, end and duration times
@@ -75,6 +88,7 @@ StageTwoView.prototype = {
         $('.start', this.dom).val(Util.secondsToString(region.start));
         $('.end', this.dom).val(Util.secondsToString(region.end));
         $('.duration', this.dom).val(Util.secondsToString(region.end - region.start));
+        $('.showcontent', this.dom).val(region.annotation);
     },
 };
 
@@ -87,6 +101,9 @@ StageTwoView.prototype = {
 function StageThreeView() {
     this.dom = null;
     this.editOptionsDom = null;
+    this.anno_utt_scores = {};
+    this.anno_word_scores = {};
+    this.anno_phone_scores = {};
     // Note that this assumes there are never more than 3 proximity labels
     this.colors = ['#870f4f', '#000080', '#6a1b9a'];
     this.colors.forEach(function (color, index) {
@@ -104,9 +121,11 @@ StageThreeView.prototype = {
             class: 'stage_3_message'
         });
 
+        var content = ShowContent.createShowContent();
+
         var time = Util.createSegmentTime();
 
-        time.hide();
+        // time.hide();
 
         var button = $('.audio_visual');
         button.click(function () {
@@ -116,17 +135,20 @@ StageThreeView.prototype = {
         var tagContainer = $('<div>', {
             class: 'tag_container',
         });
-        
-        this.dom = container.append([message, time, tagContainer]);
+
+        this.dom = container.append([message, content, time, tagContainer]);
     },
 
     // Replace the proximity and annotation elements with the new elements that contain the
     // tags in the proximityTags and annotationTags lists
-    updateTagContents: function(proximityTags, annotationTags) {
+    updateTagContents: function(alignCollect, annotationTiers, proximityTags, annotationTags, annotationUtteranceScores, regionList) {
         $('.tag_container', this.dom).empty();
+        var tier = this.createAnnotationTiers(annotationTiers);
         var proximity = this.createProximityTags(proximityTags);
         var annotation = this.createAnnotationTags(annotationTags);
-        $('.tag_container', this.dom).append([annotation, proximity]);
+        var utt_score = this.createUtteranceScoreLabels(annotationUtteranceScores);
+        var word_phone_score = this.createWordPhoneLabels(alignCollect, regionList);
+        $('.tag_container', this.dom).append([tier, annotation, proximity, utt_score, word_phone_score]);
     },
 
     // Create proximity tag elements
@@ -167,10 +189,12 @@ StageThreeView.prototype = {
     createAnnotationTags: function(annotationTags) {
         var my = this;
 
-        var annotation = $('<div>');
+        var annotation = $('<div>', {
+            class: 'annotation_tags_container',
+        });
         var annotationLabel = $('<div>', {
             class: 'stage_3_label',
-            text: '请选择标签:',
+            text: 'Which Phone?',
         });
 
         var annotationContainer = $('<div>', {
@@ -192,9 +216,247 @@ StageThreeView.prototype = {
         return annotation.append([annotationLabel, annotationContainer]);
     },
 
+    createAnnotationTiers: function(annotationTiers) {
+        var my = this;
+
+        var annotation = $('<div>', {
+            class: 'annotation_tiers_container',
+        });
+        var annotationLabel = $('<div>', {
+            class: 'stage_3_label',
+            text: 'Which tier?',
+        });
+
+        var annotationContainer = $('<div>', {
+            class: 'annotation_tiers'
+        });
+
+        annotationTiers.forEach(function (tagName) {
+            var tag = $('<button>', {
+                class: 'annotation_tier btn disabled',
+                text: tagName,
+            });
+            // When a proximity tag is clicked fire the 'change-tag' event with what annotation tag it is
+            tag.click(function () {
+                $(my).trigger('change-tag', [{annotation: tagName}]);
+            });
+            annotationContainer.append(tag);
+        });
+
+        return annotation.append([annotationLabel, annotationContainer]);
+    },
+
+    // Create annotation input elements
+    createUtteranceScoreLabels: function(annotationUtteranceScores) {
+        var my = this;
+
+        var annotation = $('<div>');
+        var annotationLabel = $('<div>', {
+            class: 'stage_3_label',
+            text: 'Utterance Score:',
+        });
+        var annotationContainer = $('<div>', {
+            class: 'annotation_utterance_scores'
+        });
+
+        // Loop through the annotationUtteranceScore keys and create columns with input fields
+        // See get_task.py file
+        $.each(annotationUtteranceScores, function(key, value) {
+            // Create a column div using jQuery
+            var columnDiv = $('<div>', {
+                class: 'annotation_utterance_score column'
+            });
+
+            // Create a label for the input
+            var $label = $('<label>', {
+                text: key
+            });
+
+            // Create an input element
+            var $input = $('<input>', {
+                type: 'number',
+                value: value,
+                id: key,
+                min: 0,
+                max: 10,
+                step: 1,
+                class: 'score-input'
+            });
+
+            $input.on('change', function() {
+                my.anno_utt_scores[key] = $(this).val();
+            });
+
+            // Append label and input to the column div
+            columnDiv.append($label);
+            columnDiv.append($input);
+
+            // Append the column div to the row div
+            annotationContainer.append(columnDiv);
+
+        });
+        return annotation.append([annotationLabel, annotationContainer]);
+    },
+
+    createWordPhoneLabels: function(alignCollect, regionList) {
+        var my = this;
+
+        var scrollableContainer = $('<div>', {
+            class: 'scrollable-container'
+        });
+        var table = $('<div>', {
+            id: 'alignmentTable'
+        });
+
+        const segment_ref_hyp_word_count_align = alignCollect.segment_ref_hyp_word_count_align;
+        const ref_phones = segment_ref_hyp_word_count_align.ref_phones;
+        const hyp_phones = segment_ref_hyp_word_count_align.hyp_phones;
+        const s1_leading_blank_count = segment_ref_hyp_word_count_align.s1_leading_blank_count;
+        const s2_leading_blank_count = segment_ref_hyp_word_count_align.s2_leading_blank_count;
+        const phone_ref_position = segment_ref_hyp_word_count_align.phone_ref_position;
+        const phone_hyp_position = segment_ref_hyp_word_count_align.phone_hyp_position;
+        const ref_words = segment_ref_hyp_word_count_align.ref_words;
+        const hyp_words = segment_ref_hyp_word_count_align.hyp_words;
+
+        const phone_eval = alignCollect.phone_align.phone_eval;
+        const word_eval = alignCollect.word_align.word_eval;
+
+        const maxLength = Math.max(ref_phones.length, hyp_phones.length, phone_eval.length);
+        console.log('maxLength');
+        console.log(maxLength);
+
+        // Add headers based on maxLength
+        const headerRow = $('<tr>');
+        headerRow.innerHTML = "<th>Type</th>";
+        for (let i = 1; i <= maxLength; i++) {
+            headerRow.innerHTML += `<th>${i}</th>`;
+        }
+        table.append(headerRow);
+    
+        // Helper function to create rows
+        function createRow(label, data, god, leading_blank_count = 0, type = "text", is_number = false, cellid = 'anno_', leading = false) {
+            const row = document.createElement("tr");
+            row.innerHTML = `<th>${label}</th>`;
+            // for (let j = 0; j <= leading_blank_count - 1; j++) {
+            //     const cell = document.createElement("td");
+            //     cell.innerText = "";
+            //     row.append(cell);
+            // }
+            for (let i = 0; i < maxLength; i++) {
+                const cell = document.createElement("td");
+                if (type === "text") {
+                    cell.innerText = data[i] || "";
+                } else if (type === "input") {
+                    const input_id = `${cellid}${i}`;
+                    const input = document.createElement("input");
+                    input.type = is_number ? "number" : "text"; // Set type based on is_number
+                    input.className = "annotation-input";
+                    input.id = input_id;
+                    input.value = data[i] || "";
+                    input.style.textTransform = is_number ? null : "lowercase";
+                    if (god[i] == 't') {
+                        input.value = "";
+                        input.readOnly = true;
+                        input.className = "hide";
+                        if (is_number === true) {
+                            input.min = 1;
+                            input.max = 10;
+                            input.step = 1;
+                        }
+                    }
+                    input.addEventListener('change', (event) => {
+                        my.anno_phone_scores[input_id] = event.target.value;
+                    });
+                    if (i >= leading_blank_count) {
+                        cell.append(input);
+                    }
+                }
+                if (god[i] == 't') {
+                    cell.className = "phoneboundary";
+                    cell.value = "";
+                }
+                if ((i === 0) && (data[i] === '<blank>') && (leading === true)) {
+                    const emptycell = document.createElement("td");
+                    emptycell.className = "phoneboundary";
+                    row.append(emptycell);
+                }
+                row.append(cell);
+            }
+            table.append(row);
+        }
+
+        // Helper function to create rows
+        function createMultiColumnRow(label, data, god, leading_blank_count, type = "text", is_number = false, cellid = 'anno_', boundary = true) {
+            const row = document.createElement("tr");
+            row.innerHTML = `<th>${label}</th>`;
+            if (boundary === true) {
+                const emptycell = document.createElement("td");
+                emptycell.className = "phoneboundary";
+                row.append(emptycell);
+            }
+            for (let j = 0; j <= leading_blank_count - 1; j++) {
+                const cell = document.createElement("td");
+                cell.innerText = "";
+                row.append(cell);
+            }
+            for (let i = 0; i < god.length; i++) {
+                const cell = document.createElement("td");
+                cell.colSpan = god[i];
+                if (type === "text") {
+                    cell.innerText = data[i] || "";
+                } else if (type === "input") {
+                    const input_id = `${cellid}${i}`;
+                    const input = document.createElement("input");
+                    input.type = is_number ? "number" : "text"; // Set type based on is_number
+                    input.id = input_id;
+                    input.className = "annotation-input";
+                    if (is_number === true) {
+                        input.min = 1;
+                        input.max = 10;
+                        input.step = 1;
+                    }
+                    input.addEventListener('change', (event) => {
+                        my.anno_word_scores[input_id] = event.target.value;
+                    });
+                    cell.append(input);
+                }
+                row.append(cell);
+                if (boundary === true) {
+                    const emptycell = document.createElement("td");
+                    emptycell.className = "phoneboundary";
+                    row.append(emptycell);
+                }
+            }
+            table.append(row);
+        }
+
+        // psuedo list
+        const phone_god_ref = ref_phones.map(char => (char === '|') ? 't' : 'f');
+        const phone_god_hyp = hyp_phones.map(char => (char === '|') ? 't' : 'f');
+
+        console.log('ref_words');
+        console.log(ref_words);
+        console.log('phone_ref_position');
+        console.log(phone_ref_position);
+
+        createMultiColumnRow("REF_W", ref_words, phone_ref_position, s1_leading_blank_count, 'text', false);
+        createRow("REF_P", ref_phones, phone_god_ref);
+        createMultiColumnRow("HYP_W", hyp_words, phone_hyp_position, s2_leading_blank_count, 'text', false);
+        createRow("HYP_P", hyp_phones, phone_god_hyp);
+        createRow("Eval", phone_eval, phone_god_hyp);
+        createRow("Diag", hyp_phones, phone_god_hyp, 0, "input", false, 'diag_anno_');
+        createRow("Score_P_accuracy", Array(maxLength).fill(""), phone_god_hyp, s1_leading_blank_count, "input", true, 's_p_acc_anno_');
+        createMultiColumnRow("Score_W_accuracy", ref_words, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_acc_anno_');
+        createMultiColumnRow("Score_W_stress", ref_words, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_str_anno_');
+        createMultiColumnRow("Score_W_total", ref_words, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_tol_anno_');
+    
+        return scrollableContainer.append(table);
+    },
+
     // Update stage 3 dom with the current regions data
     update: function(region) {
         this.updateTime(region);
+        this.updateShowContent(region);
         this.updateSelectedTags(region);
     },
 
@@ -206,24 +468,45 @@ StageThreeView.prototype = {
         $('.duration', this.dom).val(Util.secondsToString(region.end - region.start));
     },
 
+    updateShowContent: function(region) {
+        $('.showcontent', this.dom).val(region.annotation);
+    },
+
     // Update the elements of the proximity and annotation tags to highlight
     // which tags match the selected region's current annotation and proximity
     updateSelectedTags: function(region) {
+        // DEBUG
+        // $('.annotation_tier', this.dom).removeClass('selected');
         $('.annotation_tag', this.dom).removeClass('selected');
         $('.proximity_tag', this.dom).removeClass('selected');
         $('.custom_tag input', this.dom).val('');
+        // $('.annotation_tier', this.dom).removeClass('disabled');
         $('.annotation_tag', this.dom).removeClass('disabled');
         $('.proximity_tag', this.dom).removeClass('disabled');
 
         if (region.annotation) {
+            // console.log('>>>>>>>>>>>>>>');
+            // console.log(region.annotation);
+            // console.log('<<<<<<<<<<<<<<');
             var selectedTags = $('.annotation_tag', this.dom).filter(function () {
+                // console.log('<<<< '+this.innerHTML+' <<<<<');
                 return this.innerHTML === region.annotation;
             });
             if (selectedTags.length > 0) {
-                selectedTags.addClass('selected');       
+                selectedTags.addClass('selected'); // which is selected
             } else {
                 $('.custom_tag input', this.dom).val(region.annotation); 
             }
+
+            // // DEBUG
+            // var selectedTiers = $('.annotation_tier', this.dom).filter(function () {
+            //     return this.innerHTML === region.annotation;
+            // });
+            // if (selectedTiers.length > 0) {
+            //     selectedTiers.addClass('selected');       
+            // } else {
+            //     $('.custom_tag input', this.dom).val(region.annotation); 
+            // }
         }
 
         if (region.proximity) {
@@ -256,6 +539,9 @@ function AnnotationStages(wavesurfer, hiddenImage) {
     this.previousF1Score = 0;
     this.events = [];
     this.alwaysShowTags = false;
+    this.tier_selected = false;
+    this.phone_selected = false;
+
 
     // These are not reset, since they should only be shown for the first clip
     this.shownTagHint = false;
@@ -277,7 +563,6 @@ AnnotationStages.prototype = {
         this.stageOneView.create();
         this.stageTwoView.create();
         this.stageThreeView.create();
-
     },
 
     // Extract the important information from a region object
@@ -304,6 +589,19 @@ AnnotationStages.prototype = {
             }
         }
         return annotationData;
+    },
+
+    // Return an array of all the annotations the user has made for this clip
+    getUttScoreAnnotations: function() {
+        return this.stageThreeView.anno_utt_scores;
+    },
+
+    getWordScoreAnnotations: function() {
+        return this.stageThreeView.anno_word_scores;
+    },
+
+    getPhoneScoreAnnotations: function() {
+        return this.stageThreeView.anno_phone_scores;
     },
 
     // Return an array of all the annotations the user has created and then deleted for this clip
@@ -334,13 +632,19 @@ AnnotationStages.prototype = {
         return true;
     },
 
+    // Tier click an option then disselect the buttion
+    swapTier: function() {
+        $('.annotation_tier', this.dom).removeClass('selected');
+        $('.annotation_tier', this.dom).addClass('disabled');
+    },
+
     // Switch the currently selected region
     swapRegion: function(newStage, region) {
         if (this.currentRegion) {
             this.currentRegion.update({drag: false, resize: false});
             $(this.currentRegion.element).removeClass('current_region');
             $(this.currentRegion.annotationLabel.element).removeClass('current_label');
-
+            
             // Remove the highlated label and disable.
             $('.annotation_tag', this.dom).removeClass('selected');
             $('.proximity_tag', this.dom).removeClass('selected');
@@ -373,10 +677,12 @@ AnnotationStages.prototype = {
                 this.currentRegion.update({drag: false, resize: false});
                 $(this.currentRegion.element).removeClass('current_region');
                 $(this.currentRegion.annotationLabel.element).removeClass('current_label');
-
+                
                 // Remove the highlated label and disable.
+                $('.annotation_tier', this.dom).removeClass('selected');
                 $('.annotation_tag', this.dom).removeClass('selected');
                 $('.proximity_tag', this.dom).removeClass('selected');
+                $('.annotation_tier', this.dom).addClass('disabled');
                 $('.annotation_tag', this.dom).addClass('disabled');
                 $('.proximity_tag', this.dom).addClass('disabled');
             }
@@ -385,6 +691,7 @@ AnnotationStages.prototype = {
 
     // Switch stages and the current region
     updateStage: function(newStage, region) {
+
         // Swap regions 
         this.swapRegion(newStage, region);
 
@@ -461,11 +768,11 @@ AnnotationStages.prototype = {
     },
 
     // Reset field values and update the proximity tags, annotation tages and annotation solutions
-    reset: function(proximityTags, annotationTags, solution, alwaysShowTags) {
+    reset: function(alignCollect, annotationTiers, proximityTags, annotationTags, annotationUtteranceScores, solution, alwaysShowTags, regionList) {
         this.clear();
         // Update all Tags' Contents
         this.alwaysShowTags = alwaysShowTags || false;
-        this.updateContentsTags(proximityTags, annotationTags);
+        this.updateContentsTags(alignCollect, annotationTiers, proximityTags, annotationTags, annotationUtteranceScores, regionList);
         this.usingProximity = proximityTags.length > 0;
         // Update solution set
         this.annotationSolutions = solution.annotations || [];
@@ -473,10 +780,14 @@ AnnotationStages.prototype = {
     },
 
     // Update stage 3 dom with new proximity tags and annotation tags
-    updateContentsTags: function(proximityTags, annotationTags) {
+    updateContentsTags: function(alignCollect, annotationTiers, proximityTags, annotationTags, annotationUtteranceScores, regionList) {
         this.stageThreeView.updateTagContents(
+            alignCollect,
+            annotationTiers,
             proximityTags,
-            annotationTags
+            annotationTags,
+            annotationUtteranceScores,
+            regionList
         );
     },
 
@@ -507,6 +818,7 @@ AnnotationStages.prototype = {
             this.trackEvent('select-for-edit', region.id);
             this.updateStage(3, region);
             this.stageThreeView.updateTime(this.currentRegion);
+            this.stageThreeView.updateShowContent(this.currentRegion);
         } else {
             this.trackEvent('deselect', region.id);
             this.updateStage(1);
@@ -518,6 +830,7 @@ AnnotationStages.prototype = {
     updateStartEndStageThree: function() {
         if (this.currentStage === 3) {
             this.stageThreeView.updateTime(this.currentRegion);
+            this.stageThreeView.updateShowContent(this.currentRegion);
         }
     },
 
@@ -555,9 +868,12 @@ AnnotationStages.prototype = {
     // Event Handler: For online creation mode, called when the user clicks start creating annotation
     // Creates a region and switches to stage 2 where the region grows as the audio plays
     startAnnotation: function() {
+
         var region = this.wavesurfer.addRegion({
             start: this.wavesurfer.getCurrentTime(),
             end: this.wavesurfer.getCurrentTime(),
+            drag: false, // fix the region, can not be dragged
+            resize: false // Prevent users from resizing regions
         });
         this.updateStage(2, region);
     },
@@ -586,21 +902,7 @@ AnnotationStages.prototype = {
         }
     },
 
-    // Event handler: called when a region's tags are added or changed
-    updateRegion: function(event, data) {
-        var annotationEventType = null;
-        var proximityEventType = null;
-
-        // Determine if the tags where added for the first time or just changed
-        if (data.annotation && data.annotation !== this.currentRegion.annotation) {
-            annotationEventType = this.currentRegion.annotation ? 'change' : 'add';
-        }
-        if (data.proximity && data.proximity !== this.currentRegion.proximity) {
-            proximityEventType = this.currentRegion.proximity ? 'change' : 'add';
-        }
-
-        // Update the current region with the tag data
-        this.currentRegion.update(data);
+    updateRegionFinalCall: function(annotationEventType, proximityEventType) {
         // Give feedback if these tags improve the user's f1 score
         this.giveFeedback();
 
@@ -619,11 +921,112 @@ AnnotationStages.prototype = {
                 this.currentRegion.proximity
             );
         }
+    },
 
-        // If the region has all its required tags, deselect the region and go back to stage 1
-        // if (this.currentRegion.annotation && (!this.usingProximity || this.currentRegion.proximity)) {
-            // this.updateStage(1);
-        // }
+    // Event handler: called when a region's tags are added or changed
+    updateRegion: function(event, data) {
+        var annotationEventType = null;
+        var proximityEventType = null;
+
+        // Determine if the tags where added for the first time or just changed
+        if (data.annotation && data.annotation !== this.currentRegion.annotation) {
+            annotationEventType = this.currentRegion.annotation ? 'change' : 'add';
+        }
+        if (data.proximity && data.proximity !== this.currentRegion.proximity) {
+            proximityEventType = this.currentRegion.proximity ? 'change' : 'add';
+        }
+
+        // if phone or word in selection
+        var what_pressed = data.annotation.toLowerCase();
+        var current_annotation = splitStringIfCommaExists(this.currentRegion.annotation)[0];
+        var which_tier = (current_annotation.includes('phone')) ? 'phone': ((current_annotation.includes('word'))?'word': '');
+        var which_tags = current_annotation.filter(item => item !== which_tier);
+
+        // if tier
+        if ((['phone', 'word'].includes(what_pressed))) {
+            if (!current_annotation.includes(what_pressed)) { // e.g. [], ['ae']
+                this.tier_selected = true;
+
+                if (which_tier === what_pressed) { // 'word' == 'word', 'phone' == 'phone'
+                    this.currentRegion.update(data); // delete the current tier
+                    this.tier_selected == false;
+                }
+                // 2. change to another tier
+                if ((which_tier !== what_pressed) && which_tier) { // '' != 'phone', 'word' != 'phone'
+                    var fakedata = structuredClone(data);
+                    fakedata.annotation = which_tier;
+                    this.currentRegion.update(fakedata); // delete the current tier,
+
+                    // reorder tag after tier
+                    which_tags.forEach(function(tagName) {
+                        var fakedata = structuredClone(data);
+                        fakedata.annotation = tagName;
+                        this.currentRegion.update(fakedata); // 'this' refers to the outer 'this'
+                    }.bind(this));  // bind 'this' to the outer 'this'
+
+                    this.currentRegion.update(data); // then change to the other tier label
+
+                    // reorder tag after tier
+                    which_tags.forEach(function(tagName) {
+                        var fakedata = structuredClone(data);
+                        fakedata.annotation = tagName;
+                        this.currentRegion.update(fakedata); // 'this' refers to the outer 'this'
+                    }.bind(this));  // bind 'this' to the outer 'this'
+                } else if ((which_tier !== what_pressed) && !which_tier) {
+                    this.currentRegion.update(data); // then change to the other tier label
+                }
+
+                this.updateRegionFinalCall(annotationEventType, proximityEventType);
+                return;
+
+            } else if (current_annotation.includes(what_pressed)) { // e.g. ['phone'], ['phone', 'ae']
+                this.tier_selected = false;
+                this.updateRegionFinalCall(annotationEventType, proximityEventType);
+                return;
+            }
+
+        // if tags
+        } else if (!(['phone', 'word'].includes(what_pressed))) {
+            if (!current_annotation.includes(what_pressed)) { // e.g. [], ['phone']
+                // e.g. current_annotation is [], what_pressed is any tag
+                // e.g. current_annotation is ['ae'], what_pressed is any other tag but not 'ae'
+                this.phone_selected = true;
+
+                if (which_tags.includes(what_pressed)) {
+                    // e.g. which_tags is ['ae'], what_pressed is 'ae'
+                    // e.g. which_tags is ['ae', 'ah'], what_pressed is 'ae'
+                    this.currentRegion.update(data); // delete the tag
+                    this.updateRegionFinalCall(annotationEventType, proximityEventType);
+                    return;
+
+                } else {
+                    // e.g. ['phone']
+                    // e.g. ['phone', 'ae'], what_pressed is 'ah'
+
+                    which_tags.forEach(function(tagName) {
+                        var fakedata = structuredClone(data);
+                        fakedata.annotation = tagName;
+                        this.currentRegion.update(fakedata); // 'this' refers to the outer 'this'
+                    }.bind(this));  // bind 'this' to the outer 'this'
+
+                    var fakedata = structuredClone(data);
+                    this.currentRegion.update(data); // add the current tag
+                    this.updateRegionFinalCall(annotationEventType, proximityEventType);
+                    return;
+                }
+
+            } else if (current_annotation.includes(what_pressed)) { // e.g. ['ae'], ['ae', 'phone'], what_pressed is 'ae'
+                this.phone_selected = false;
+
+                // e.g. [], ['phone']
+                this.currentRegion.update(data); // delete the current tier
+                this.tier_selected == false;
+                console.log('Delected the tier: '+data.annotation);
+                this.updateRegionFinalCall(annotationEventType, proximityEventType);
+                return;
+            }
+        }
+
     },
 
     // Helper function, called when the user makes changes that will affect their f1 score
@@ -760,6 +1163,7 @@ AnnotationStages.prototype = {
     // Event Handler: triggered when region is first started to be created, adds action to event list
     trackBeginingOfRegionCreation: function(region) {
         this.trackEvent('start-to-create', region.id);
+        // console.log(region.id);
         $(region.element).addClass('current_region');
         $(region.annotationLabel.element).addClass('current_label');
     },
@@ -814,7 +1218,10 @@ AnnotationStages.prototype = {
 
     // Attach event handlers for wavesurfer events
     addWaveSurferEvents: function() {
-        this.wavesurfer.enableDragSelection();
+        this.wavesurfer.enableDragSelection({
+            drag: false, // prevent new region from drag
+            resize: false, // prevent new region from resize
+        });
         this.wavesurfer.on('audioprocess', this.updateEndOfRegion.bind(this));
         this.wavesurfer.on('audioprocess', this.updateStageOne.bind(this));
         this.wavesurfer.on('pause', this.updateEndOfRegion.bind(this));

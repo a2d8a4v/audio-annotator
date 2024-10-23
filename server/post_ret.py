@@ -17,17 +17,22 @@ class PostRet(BaseReqHandler):
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
         self.wav_dir = application.settings["settings"]["wav_dir"]
+        self.save_dir = application.settings["settings"]["save_dir"]
+        self.json_suffix = application.settings["settings"]["json_suffix"]
 
     def post(self):
         resp = {"ret": "ok",
                 "msg": ""}
         try:
             ret_json = self.json_args
+            print(ret_json)
+
             logger.info(ret_json)
             rel_wav_path = get_relative_path("/wavs", ret_json["task"]["url"])
-            wav_path = os.path.join(self.wav_dir, rel_wav_path)
-            wav_json_path = wav_path + ".json"
-            with open(wav_json_path, "w+", encoding="utf-8") as f:
+            wav_path = ret_json["task"]["url"]
+            file_name_without_extension = os.path.splitext(os.path.basename(wav_path))[0]
+            save_json_file_path = os.path.join(self.save_dir, file_name_without_extension + f".{self.json_suffix}.json")
+            with open(save_json_file_path, "w+", encoding="utf-8") as f:
                 json.dump(ret_json, f, ensure_ascii=False)
             resp["msg"] = "保存成功"
         except Exception as e:

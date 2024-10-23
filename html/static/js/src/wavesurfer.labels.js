@@ -183,9 +183,10 @@ WaveSurfer.util.extend(WaveSurfer.Labels, WaveSurfer.Observer);
 WaveSurfer.Label = {
     style: WaveSurfer.Drawer.style,
 
-    init: function (region, container, wavesurfer) {
+    init: function (region, container, deletebutton, wavesurfer) {
         this.container = container;
         this.wavesurfer = region.wavesurfer;
+        this.delete = deletebutton;
         this.element = null;
         this.playBtn = null;
         this.text = null;
@@ -224,17 +225,19 @@ WaveSurfer.Label = {
         this.text = this.element.appendChild(document.createElement('span'));
         this.text.innerHTML = '?';
 
-        // add delete region to the right
-        this.deleteRegion = labelEl.appendChild(document.createElement('i'));
-        this.deleteRegion.className = 'fa fa-times-circle'
+        if (this.delete === true) {
+            // add delete region to the right
+            this.deleteRegion = labelEl.appendChild(document.createElement('i'));
+            this.deleteRegion.className = 'fa fa-times-circle'
 
-        this.style(this.deleteRegion, {
-            position: 'absolute',
-            marginTop: '3px',
-            right: '0px',
-            marginRight: '5px',
-            cursor: 'pointer'
-        });
+            this.style(this.deleteRegion, {
+                position: 'absolute',
+                marginTop: '3px',
+                right: '0px',
+                marginRight: '5px',
+                cursor: 'pointer'
+            });
+        }
 
         // Place the label on the bottom row
         this.updateRender(2);
@@ -278,10 +281,12 @@ WaveSurfer.Label = {
             my.region.wavesurfer.fireEvent('label-dblclick', my.region, e);
         });
 
-        this.deleteRegion.addEventListener('click', function (e) {
-            e.stopPropagation();
-            my.region.remove();
-        });
+        if (this.delete === true) {
+            this.deleteRegion.addEventListener('click', function (e) {
+                e.stopPropagation();
+                my.region.remove();
+            });
+        }
     }
 };
 

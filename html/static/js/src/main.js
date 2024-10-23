@@ -54,7 +54,8 @@ function Annotator() {
     var labels = Object.create(WaveSurfer.Labels);
     labels.init({
         wavesurfer: this.wavesurfer,
-        container: '.labels'
+        container: '.labels',
+        deletebutton: false,
     });
 
     // Create hiddenImage, an image that is slowly revealed to a user as they annotate 
@@ -109,6 +110,8 @@ Annotator.prototype = {
             if (my.currentTask.annotations.length > 0) {
                 for (var i = 0; i < my.currentTask.annotations.length; i++) {
                     var annotation = my.currentTask.annotations[i];
+                    annotation.drag = false;
+                    annotation.resize = false;
                     var region = my.wavesurfer.addRegion(annotation);
                     my.stages.updateStage(3, region);
                 }
@@ -118,6 +121,56 @@ Annotator.prototype = {
         this.wavesurfer.on('click', function (e) {
             my.stages.clickDeselectCurrentRegion();
         });
+    },
+
+    addTierInputs: function () {
+        var my = this;
+        var wait;
+
+
+    },
+
+    addScoreInputs: function () {
+        var my = this;
+        var wait
+
+        wait = new Promise((resolve, reject) => {
+            if (my.currentTask) {
+                resolve(my.currentTask.annotationScore);
+            } else {
+                // Optional: Retry mechanism if it's expected to load soon
+                const interval = setInterval(() => {
+                    if (my.currentTask) {
+                        clearInterval(interval);
+                        resolve(my.currentTask.annotationScore);
+                    }
+                }, 100); // Check every 100ms
+            }
+        });
+        wait.then((content) => {
+            function tryUpdateInputs(retries = 5) {
+                // Loop through the annotation scores
+                $.each(content, function(key, value) {
+                    // Find the input element by its id
+                    var $input = $('#' + key);
+                    // If the input is found, update the value
+                    if ($input.length) {
+                        $input.val(value);
+                    } else if (retries > 0) {
+                        // Retry after a short delay if the input doesn't exist yet
+                        setTimeout(() => tryUpdateInputs(retries - 1), 100); // Retry after 100ms
+                    } else {
+                        console.warn('Input with id "' + key + '" not found after retries.');
+                    }
+                });
+            }
+        
+            // Call the function to try updating the inputs
+            tryUpdateInputs();
+        }).catch((error) => {
+            console.error('Error:', error);
+        });
+
     },
 
     updateTaskTime: function () {
@@ -131,6 +184,8 @@ Annotator.prototype = {
 
     addEvents: function () {
         this.addWaveSurferEvents();
+        this.addTierInputs();
+        this.addScoreInputs();
         this.addWorkflowBtnEvents();
     },
 
@@ -141,16 +196,27 @@ Annotator.prototype = {
 
             // Update the different tags the user can use to annotate, also update the solutions to the
             // annotation task if the user is suppose to recieve feedback
+            var annotationTiers = my.currentTask.annotationTier;
             var proximityTags = my.currentTask.proximityTag;
             var annotationTags = my.currentTask.annotationTag;
+            var annotationUtteranceScores = my.currentTask.annotationUtteranceScore;
+            var annotationWordScores = my.currentTask.annotationScore;
+            var annotationPhoneScores = my.currentTask.annotationScore;
+            var alignCollect = my.currentTask.alignCollect;
+
             var tutorialVideoURL = my.currentTask.tutorialVideoURL;
             var alwaysShowTags = my.currentTask.alwaysShowTags;
             var instructions = my.currentTask.instructions;
+
             my.stages.reset(
+                alignCollect,
+                annotationTiers,
                 proximityTags,
                 annotationTags,
+                annotationUtteranceScores,
                 annotationSolutions,
-                alwaysShowTags
+                alwaysShowTags,
+                my.wavesurfer.regions
             );
 
             // set video url
@@ -185,14 +251,28 @@ Annotator.prototype = {
                 $('#trigger').hide();
             }
 
-            $('#wav_url').attr('href', my.currentTask.url);
-            var wav_name = my.currentTask.url.substring(my.currentTask.url.lastIndexOf("/") + 1);
-            $('#wav_url').html(wav_name);
+            var uttid = my.currentTask.uttid;
+            var filename_without_extension = my.currentTask.filename_without_extension
+            $('#wav_url').html(filename_without_extension + ' - ' + uttid);
 
             // Update the visualization type and the feedback type and load in the new audio clip
             my.wavesurfer.params.visualization = my.currentTask.visualization; // invisible, spectrogram, waveform
             my.wavesurfer.params.feedback = my.currentTask.feedback; // hiddenImage, silent, notify, none 
-            my.wavesurfer.load(my.currentTask.url);
+            // Decode Base64 audio data to binary
+            const base64String = my.currentTask.wav_binary;
+            const binaryString = atob(base64String);  // Decode Base64 to binary string
+
+            // Convert binary string to Uint8Array
+            const byteArray = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                byteArray[i] = binaryString.charCodeAt(i);
+            }
+
+            // Create a Blob from the binary data
+            const blob = new Blob([byteArray], { type: 'audio/wav' });
+
+            // Load Blob into WaveSurfer
+            my.wavesurfer.loadBlob(blob);
         };
 
         if (this.currentTask.feedback !== 'none') {
@@ -246,6 +326,9 @@ Annotator.prototype = {
                 task_end_time: new Date().getTime(),
                 visualization: this.wavesurfer.params.visualization,
                 annotations: this.stages.getAnnotations(),
+                utt_score_annotations: this.stages.getUttScoreAnnotations(),
+                word_score_annotatoins: this.stages.getWordScoreAnnotations(),
+                phone_score_annotations: this.stages.getPhoneScoreAnnotations(),
                 deleted_annotations: this.stages.getDeletedAnnotations(),
                 // List of the different types of actions they took to create the annotations
                 annotation_events: this.stages.getEvents(),

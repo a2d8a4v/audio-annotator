@@ -1,0 +1,7 @@
+soundfile
+notebook
+networkx
+nltk
+numpy
+Pyphen
+

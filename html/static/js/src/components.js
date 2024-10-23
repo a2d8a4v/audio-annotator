@@ -53,6 +53,28 @@ var Util = {
 
 /*
  * Purpose:
+ *   Show current content. Due to the small font size in annotation
+ * Dependencies:
+ *   jQuery, Font Awesome, Wavesurfer (lib/wavesurfer.min.js), Util (src/components.js), audio-annotator.css
+ */
+
+var ShowContent = {
+    createShowContent: function () {
+        var contentDiv = $('<div>', {class: 'annotation_content'});
+
+        var content = $('<span>', {text: 'Content:'});
+        var contentInput = $('<input>', {
+            type: 'text',
+            class: 'form-control showcontent',
+            readonly: true
+        });
+
+        return contentDiv.append([content, contentInput]);
+    }
+};
+
+/*
+ * Purpose:
  *   Used for the play button and timestamp that controls how the wavesurfer audio is played
  * Dependencies:
  *   jQuery, Font Awesome, Wavesurfer (lib/wavesurfer.min.js), Util (src/components.js), audio-annotator.css

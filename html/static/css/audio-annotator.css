@@ -115,9 +115,28 @@
   font-weight: normal;
 }
 
+.annotation_content input {
+  margin: 0px 8px;
+  width: 200px !important;
+  display: inline-block;
+  font-weight: normal;
+}
+
+.annotation_content span {
+  margin: 0px 8px;
+  color: gray;
+  font-style: italic;
+  font-weight: normal;
+}
+
 .tag_container {
   text-align: left;
   margin-top: 25px;
+}
+
+div.tag_container .annotation_tiers_container,
+div.tag_container .annotation_tags_container {
+  display: none;
 }
 
 .stage_3_label {
@@ -132,28 +151,61 @@
 }
 
 .proximity_tags,
-.annotation_tags {
+.annotation_tags,
+.annotation_tiers {
   display: inline-block;
   width: 80%;
   vertical-align: top;
   font-size: 14px;
 }
 
+.annotation_utterance_scores {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.annotation_utterance_score {
+  flex: 1;
+  margin: 0 5px;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+}
+
+.annotation_utterance_score label {
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.score-input {
+  width: 100%;
+  padding: 5px;
+  box-sizing: border-box;
+}
+
 .proximity_tag,
-.annotation_tag {
+.annotation_tag,
+.annotation_tier {
   margin: 0px 10px 10px 10px !important;
   height: 30px;
   line-height: 30px;
   text-transform: uppercase;
 }
 
-.annotation_tag {
+.annotation_tag,
+.annotation_tier {
   background-color: #fff;
-  color: #00B1B9 !important;
+  color: #5c6c6c !important;
 }
 
 .annotation_tag:hover,
-.annotation_tag.selected {
+.annotation_tier:hover {
+  color: #fff !important;
+  background-color: #00B1B9;
+}
+.annotation_tag.selected,
+.annotation_tier.selected {
   color: #fff !important;
   background-color: #00B1B9;
 }
@@ -283,7 +335,8 @@ h6.instruction {
 
 input.form-control.start,
 input.form-control.end,
-input.form-control.duration {
+input.form-control.duration,
+input.form-control.showcontent {
   border-bottom-width: 0px;
 }
 
@@ -295,4 +348,56 @@ input.form-control.duration {
 .time {
   color: #999;
   font-style: italic;
+}
+
+.scrollable-container {
+  overflow-x: auto;
+  width: auto;
+  margin-top: 20px;
+  margin-bottom: 20px;
+  border: 1px solid #ddd;
+}
+table {
+  border-collapse: collapse;
+  font-family: Arial, sans-serif;
+  min-width: 100%;
+  table-layout: auto;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 10px; /* Increase padding to provide more space */
+  width: auto;
+  text-align: center;
+  vertical-align: middle;
+  overflow: visible;
+  position: relative;
+}
+
+th {
+  background-color: #f2f2f2;
+  font-weight: bold;
+}
+
+td input.annotation-input {
+  width: 100%;
+  padding-left: 4px;
+  padding-right: 4px;
+  box-sizing: border-box; /* Ensure padding and border are included in width */
+  border: 1px solid #ccc;
+  text-align: center;
+}
+
+
+.hide {
+    display: none;
+}
+
+.phoneboundary {
+  color: white;           /* Set text color to white */
+  background-color: yellow; /* Set background color to yellow */
+  user-select: none;       /* Disable text selection */
+  width: 0px;
+  padding-right: 0px;
+  padding-left: 0px;
 }

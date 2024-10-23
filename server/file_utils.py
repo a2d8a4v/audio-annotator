@@ -3,7 +3,33 @@
 # by vellhe 2018/5/10
 import os
 import re
+import glob
+import csv
+import base64
 
+
+def list_files_from_reference(audio_root_dir, reference_dir, quotechar=None):
+    ret = {}
+    csv_files = glob.glob(os.path.join(reference_dir, '**', '*.csv'), recursive=True)
+    
+    for csv_file in csv_files:
+        with open(csv_file, 'r', encoding='utf-8-sig') as csv_file_read_io:
+            reader = csv.reader(csv_file_read_io, delimiter=",", quotechar=quotechar)
+            columns = next(reader)  # Read the header
+            lines = [line for line in reader]  # Read remaining lines
+            
+            if 'UttID' in columns:
+                uttid_idx = columns.index('UttID')
+                level_idx = columns.index('Level')
+                ret.update({line[uttid_idx]: line[level_idx] for line in lines})
+            else:
+                print(f"'UttID' column not found in file {csv_file}")
+
+    n_ret = {}
+    for uttid, level in ret.items():
+        wav_dir = os.path.join(audio_root_dir, level, uttid)
+        n_ret[uttid] = wav_dir
+    return n_ret
 
 def list_files(root_dir, suffix, recursion=True):
     ret = list()
@@ -78,6 +104,11 @@ def get_relative_path(parent_path, target_path, sep=os.path.sep, pardir=os.path.
         return target_path
     return sep.join([pardir] * len(u1) + u2)
 
+
+def load_audio_to_binary(wav_path):
+    with open(wav_path, "rb") as wav_file:
+        wav_binary = base64.b64encode(wav_file.read()).decode("utf-8")
+        return wav_binary
 
 if __name__ == "__main__":
     print(get_relative_path("test/test11/", "test/test11/test21"))
