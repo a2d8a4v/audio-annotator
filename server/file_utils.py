@@ -13,11 +13,14 @@ def list_files_from_reference(audio_root_dir, reference_dir, quotechar=None):
     csv_files = glob.glob(os.path.join(reference_dir, '**', '*.csv'), recursive=True)
     
     for csv_file in csv_files:
+        base_name = os.path.basename(csv_file).strip()
+        if base_name not in ['advanced_merged_20241022.csv', 'intermediate_merged_20241022.csv', 'primary_merged_20241022.csv']:
+            continue
         with open(csv_file, 'r', encoding='utf-8-sig') as csv_file_read_io:
             reader = csv.reader(csv_file_read_io, delimiter=",", quotechar=quotechar)
             columns = next(reader)  # Read the header
             lines = [line for line in reader]  # Read remaining lines
-            
+
             if 'UttID' in columns:
                 uttid_idx = columns.index('UttID')
                 level_idx = columns.index('Level')
@@ -26,10 +29,12 @@ def list_files_from_reference(audio_root_dir, reference_dir, quotechar=None):
                 print(f"'UttID' column not found in file {csv_file}")
 
     n_ret = {}
+    utt2level = {}
     for uttid, level in ret.items():
         wav_dir = os.path.join(audio_root_dir, level, uttid)
         n_ret[uttid] = wav_dir
-    return n_ret
+        utt2level[uttid] = level
+    return n_ret, utt2level
 
 def list_files(root_dir, suffix, recursion=True):
     ret = list()

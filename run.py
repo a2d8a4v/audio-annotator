@@ -87,8 +87,9 @@ class IndexHandler(BaseReqHandler):
         self.render("index.html")
 
 
-def run(host='127.0.0.1', port=8282, debug=True, wav_dir=os.path.join(os.path.dirname(__file__), "wavs"), reference_dir=None, inventory_file_path=None, save_dir=None, info_dir=None, json_suffix=None):
+def run(host='127.0.0.1', port=8282, debug=True, apa_dir=None, wav_dir=os.path.join(os.path.dirname(__file__), "wavs"), reference_dir=None, inventory_file_path=None, save_dir=None, info_dir=None, json_suffix=None):
     settings = {
+        "apa_dir": apa_dir,
         "wav_dir": wav_dir,
         "info_dir": info_dir,
         "reference_dir": reference_dir,
@@ -132,6 +133,8 @@ def main():
                         help='the reference list for the audio file list want to label')
     parser.add_argument("-s", "--save_dir", default=os.path.join(os.path.dirname(__file__), "save_json"))
     parser.add_argument("-f", "--info_dir", default=os.path.join(os.path.dirname(__file__), "info"))
+    parser.add_argument("-a", "--apa_dir", default='')
+
     parser.add_argument("-t", "--json_suffix", default="label")
     
     parser.add_argument("-i", "--inventory_file_path", default=os.path.join(os.path.dirname(__file__), "/home/jtlee/projects/MDD/Peppanet/data/lang_39phn/phn_42_units.txt"))
@@ -146,7 +149,7 @@ def main():
     logger = logging.getLogger("root")
     logger.info("ADDRESS http://%s:%d, DEBUG %s", args.host, args.port, args.debug)
 
-    run(host=args.host, port=args.port, debug=args.debug, wav_dir=args.wav_dir, reference_dir=args.reference_dir, inventory_file_path=args.inventory_file_path, save_dir=args.save_dir, info_dir=args.info_dir, json_suffix=args.json_suffix)
+    run(host=args.host, port=args.port, debug=args.debug, apa_dir=args.apa_dir, wav_dir=args.wav_dir, reference_dir=args.reference_dir, inventory_file_path=args.inventory_file_path, save_dir=args.save_dir, info_dir=args.info_dir, json_suffix=args.json_suffix)
 
 
 if __name__ == "__main__":

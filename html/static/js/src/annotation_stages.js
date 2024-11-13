@@ -141,13 +141,13 @@ StageThreeView.prototype = {
 
     // Replace the proximity and annotation elements with the new elements that contain the
     // tags in the proximityTags and annotationTags lists
-    updateTagContents: function(alignCollect, annotationTiers, proximityTags, annotationTags, annotationUtteranceScores, regionList) {
+    updateTagContents: function(alignCollect, annotationTiers, proximityTags, annotationTags, annotationPhoneScores, annotationWordScores, annotationUtteranceScores, regionList) {
         $('.tag_container', this.dom).empty();
         var tier = this.createAnnotationTiers(annotationTiers);
         var proximity = this.createProximityTags(proximityTags);
         var annotation = this.createAnnotationTags(annotationTags);
         var utt_score = this.createUtteranceScoreLabels(annotationUtteranceScores);
-        var word_phone_score = this.createWordPhoneLabels(alignCollect, regionList);
+        var word_phone_score = this.createWordPhoneLabels(alignCollect, regionList, annotationPhoneScores, annotationWordScores);
         $('.tag_container', this.dom).append([tier, annotation, proximity, utt_score, word_phone_score]);
     },
 
@@ -283,6 +283,12 @@ StageThreeView.prototype = {
                 class: 'score-input'
             });
 
+            // Function to initialize the array with preloaded values
+            $input.each(function() {
+                my.anno_utt_scores[key] = $(this).val(); // Set the initial value based on the preloaded value
+            });
+
+            // Update the value on change
             $input.on('change', function() {
                 my.anno_utt_scores[key] = $(this).val();
             });
@@ -298,9 +304,8 @@ StageThreeView.prototype = {
         return annotation.append([annotationLabel, annotationContainer]);
     },
 
-    createWordPhoneLabels: function(alignCollect, regionList) {
+    createWordPhoneLabels: function(alignCollect, regionList, annotationPhoneScores, annotationWordScores) {
         var my = this;
-
         var scrollableContainer = $('<div>', {
             class: 'scrollable-container'
         });
@@ -322,8 +327,6 @@ StageThreeView.prototype = {
         const word_eval = alignCollect.word_align.word_eval;
 
         const maxLength = Math.max(ref_phones.length, hyp_phones.length, phone_eval.length);
-        console.log('maxLength');
-        console.log(maxLength);
 
         // Add headers based on maxLength
         const headerRow = $('<tr>');
@@ -337,12 +340,13 @@ StageThreeView.prototype = {
         function createRow(label, data, god, leading_blank_count = 0, type = "text", is_number = false, cellid = 'anno_', leading = false) {
             const row = document.createElement("tr");
             row.innerHTML = `<th>${label}</th>`;
-            // for (let j = 0; j <= leading_blank_count - 1; j++) {
-            //     const cell = document.createElement("td");
-            //     cell.innerText = "";
-            //     row.append(cell);
-            // }
-            for (let i = 0; i < maxLength; i++) {
+            if (type === "input") {
+                if (!my.anno_phone_scores.hasOwnProperty(cellid)) {
+                    my.anno_phone_scores[cellid] = {};
+                }
+            }
+            console.log(god.length);
+            for (let i = 0; i < god.length; i++) {
                 const cell = document.createElement("td");
                 if (type === "text") {
                     cell.innerText = data[i] || "";
@@ -352,20 +356,25 @@ StageThreeView.prototype = {
                     input.type = is_number ? "number" : "text"; // Set type based on is_number
                     input.className = "annotation-input";
                     input.id = input_id;
-                    input.value = data[i] || "";
                     input.style.textTransform = is_number ? null : "lowercase";
-                    if (god[i] == 't') {
+                    if (god[i] === 't') {
                         input.value = "";
                         input.readOnly = true;
                         input.className = "hide";
+                    } else if (god[i] === 'f') {
                         if (is_number === true) {
                             input.min = 1;
                             input.max = 10;
                             input.step = 1;
+                            console.log(i);
+                            input.value = data[i].accuracy_score || "";
+                        } else {
+                            input.value = data[i] || "";
                         }
                     }
+                    my.anno_phone_scores[cellid][input_id] = input.value;
                     input.addEventListener('change', (event) => {
-                        my.anno_phone_scores[input_id] = event.target.value;
+                        my.anno_phone_scores[cellid][input_id] = event.target.value;
                     });
                     if (i >= leading_blank_count) {
                         cell.append(input);
@@ -399,6 +408,12 @@ StageThreeView.prototype = {
                 cell.innerText = "";
                 row.append(cell);
             }
+            if (type === "input") {
+                // Function to initialize the array with preloaded values
+                if (!my.anno_word_scores.hasOwnProperty(cellid)) {
+                    my.anno_word_scores[cellid] = {};
+                }
+            }
             for (let i = 0; i < god.length; i++) {
                 const cell = document.createElement("td");
                 cell.colSpan = god[i];
@@ -414,10 +429,13 @@ StageThreeView.prototype = {
                         input.min = 1;
                         input.max = 10;
                         input.step = 1;
+                        input.value = data[i].word_accuracy || "";
                     }
+                    my.anno_word_scores[cellid][input_id] = input.value;
                     input.addEventListener('change', (event) => {
-                        my.anno_word_scores[input_id] = event.target.value;
+                        my.anno_word_scores[cellid][input_id] = event.target.value;
                     });
+
                     cell.append(input);
                 }
                 row.append(cell);
@@ -434,19 +452,21 @@ StageThreeView.prototype = {
         const phone_god_ref = ref_phones.map(char => (char === '|') ? 't' : 'f');
         const phone_god_hyp = hyp_phones.map(char => (char === '|') ? 't' : 'f');
 
-        console.log('ref_words');
         console.log(ref_words);
-        console.log('phone_ref_position');
-        console.log(phone_ref_position);
-
+        console.log(ref_phones);
+        console.log(hyp_words);
+        console.log(hyp_phones);
+        console.log(phone_eval);
+        console.log(annotationPhoneScores);
+        
         createMultiColumnRow("REF_W", ref_words, phone_ref_position, s1_leading_blank_count, 'text', false);
         createRow("REF_P", ref_phones, phone_god_ref);
         createMultiColumnRow("HYP_W", hyp_words, phone_hyp_position, s2_leading_blank_count, 'text', false);
         createRow("HYP_P", hyp_phones, phone_god_hyp);
         createRow("Eval", phone_eval, phone_god_hyp);
         createRow("Diag", hyp_phones, phone_god_hyp, 0, "input", false, 'diag_anno_');
-        createRow("Score_P_accuracy", Array(maxLength).fill(""), phone_god_hyp, s1_leading_blank_count, "input", true, 's_p_acc_anno_');
-        createMultiColumnRow("Score_W_accuracy", ref_words, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_acc_anno_');
+        createRow("Score_P_accuracy", annotationPhoneScores, phone_god_hyp, s1_leading_blank_count, "input", true, 's_p_acc_anno_');
+        createMultiColumnRow("Score_W_accuracy", annotationWordScores, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_acc_anno_');
         createMultiColumnRow("Score_W_stress", ref_words, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_str_anno_');
         createMultiColumnRow("Score_W_total", ref_words, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_tol_anno_');
     
@@ -768,11 +788,11 @@ AnnotationStages.prototype = {
     },
 
     // Reset field values and update the proximity tags, annotation tages and annotation solutions
-    reset: function(alignCollect, annotationTiers, proximityTags, annotationTags, annotationUtteranceScores, solution, alwaysShowTags, regionList) {
+    reset: function(alignCollect, annotationTiers, proximityTags, annotationTags, annotationPhoneScores, annotationWordScores, annotationUtteranceScores, solution, alwaysShowTags, regionList) {
         this.clear();
         // Update all Tags' Contents
         this.alwaysShowTags = alwaysShowTags || false;
-        this.updateContentsTags(alignCollect, annotationTiers, proximityTags, annotationTags, annotationUtteranceScores, regionList);
+        this.updateContentsTags(alignCollect, annotationTiers, proximityTags, annotationTags, annotationPhoneScores, annotationWordScores, annotationUtteranceScores, regionList);
         this.usingProximity = proximityTags.length > 0;
         // Update solution set
         this.annotationSolutions = solution.annotations || [];
@@ -780,12 +800,14 @@ AnnotationStages.prototype = {
     },
 
     // Update stage 3 dom with new proximity tags and annotation tags
-    updateContentsTags: function(alignCollect, annotationTiers, proximityTags, annotationTags, annotationUtteranceScores, regionList) {
+    updateContentsTags: function(alignCollect, annotationTiers, proximityTags, annotationTags, annotationPhoneScores, annotationWordScores, annotationUtteranceScores, regionList) {
         this.stageThreeView.updateTagContents(
             alignCollect,
             annotationTiers,
             proximityTags,
             annotationTags,
+            annotationPhoneScores,
+            annotationWordScores,
             annotationUtteranceScores,
             regionList
         );

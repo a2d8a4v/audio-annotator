@@ -51,6 +51,23 @@ class PowerCall:
 
         return counts
 
+    def split_items_between_pipes(self, lst):
+        # Initialize a list to store the result
+        collected_phones = []
+        current_group = []
+
+        # Iterate through the phones list
+        for phone in lst:
+            if phone == '|':
+                if current_group:  # Save the collected phones if there's any
+                    collected_phones.append(current_group)
+                    current_group = []  # Reset for the next group
+            else:
+                current_group.append(phone)  # Collect phones between '|'
+
+        # Print the result
+        return collected_phones
+
     def remove_leading_blanks(self, lst):
         # Find the first non-empty element's index
         for i, item in enumerate(lst):
@@ -127,9 +144,12 @@ class PowerCall:
                     phone_ref.append('|')
                     phone_hyp.append('|')
                     phone_eval.append('C') # because they are '|'
-                    assert phone_s2_map, 'phone_s2_map is empty'
-                    phone_s1_map.append(phone_s2_map[-1]+1)
-                    phone_s2_map.append(phone_s2_map[-1]+1)
+                    # assert phone_s2_map, 'phone_s2_map is empty'
+                    if not phone_s2_map:
+                        print('phone_s2_map is empty')
+                    phone_s1_map.append(phone_s1_map[-1]+1)
+                    if phone_s2_map:
+                        phone_s2_map.append(phone_s2_map[-1]+1)
 
                 # print('A')
                 # print(phone_ref)
@@ -149,9 +169,6 @@ class PowerCall:
                 # they should be the same length of sequences
                 ref_phones = aligner.pronouncer.pronounce(ref_words)
                 hyp_phones = aligner.pronouncer.pronounce(hyp_words)
-                # phone_s1_map = list(range(0, len(ref_phones)))
-                # phone_s2_map = list(range(0, len(ref_phones)))
-                # phone_eval = ['C' if r == h else 'S' for r, h in zip(ref_phones, hyp_phones)]
                 phone_s1_map = []
                 phone_s2_map = []
                 phone_eval = []
@@ -187,11 +204,6 @@ class PowerCall:
                     new_phone_ref.extend(phone_seg_ref)
                     new_phone_hyp.extend(phone_seg_hyp)
 
-                    # print(phone_seg_ref)
-                    # print(phone_seg_hyp)
-                    # print(phone_seg_s1_map)
-                    # print(phone_seg_s2_map)
-                    # print(phone_seg_eval)
                     seg_phone_index += len(phone_seg_eval)
 
                 ref_phones = ' '.join(new_phone_ref)
@@ -212,6 +224,42 @@ class PowerCall:
         # assert len(new_aligner_collect) < 1
         if len(new_aligner_collect) == 1:
             aligner_collect = new_aligner_collect[0]
+            print(aligner_collect['ref_words'])
+            print(aligner_collect['ref_phones'])
+            print(aligner_collect['hyp_words'])
+            print(aligner_collect['hyp_phones'])
+            print(self.count_items_between_pipes(aligner_collect['ref_phones']))
+            print(self.count_items_between_pipes(aligner_collect['hyp_phones']))
+            
+            new_aligner_collect = {
+                'ref_words': aligner_collect['ref_words'],
+                'ref_phones': aligner_collect['ref_phones'],
+                'hyp_words': aligner_collect['hyp_words'],
+                'hyp_phones': aligner_collect['hyp_phones'],
+                'ref_phones_by_word': self.split_items_between_pipes(aligner_collect['ref_phones']),
+                'hyp_phones_by_word': self.split_items_between_pipes(aligner_collect['hyp_phones']),
+                'segment_ref_hyp_word_count_align': {
+                    'ref_phones': aligner_collect['ref_phones'],
+                    'hyp_phones': aligner_collect['hyp_phones'],
+                    's1_leading_blank_count': 0,
+                    's2_leading_blank_count': 0,
+                    'phone_ref_position': self.count_items_between_pipes(aligner_collect['ref_phones']),
+                    'phone_hyp_position': self.count_items_between_pipes(aligner_collect['hyp_phones']),
+                    'ref_words': aligner_collect['ref_words'],
+                    'hyp_words': aligner_collect['hyp_words'],
+                },
+                'word_align': {
+                    'word_s1_map': aligner_collect['word_align']['word_s1_map'],
+                    'word_s2_map': aligner_collect['word_align']['word_s2_map'],
+                    'word_eval': aligner_collect['word_align']['word_eval'],
+                },
+                'phone_align': {
+                    'phone_s1_map': aligner_collect['phone_align']['phone_s1_map'],
+                    'phone_s2_map': aligner_collect['phone_align']['phone_s2_map'],
+                    'phone_eval': aligner_collect['phone_align']['phone_eval']
+                }
+            }
+
         else:
             new_aligner_collect = dict(sorted(new_aligner_collect.items())) # key ascending sort
 
@@ -221,6 +269,8 @@ class PowerCall:
                 'ref_phones': [],
                 'hyp_words': [],
                 'hyp_phones': [],
+                'ref_phones_by_word': [],
+                'hyp_phones_by_word': [],
                 'segment_ref_hyp_word_count_align': {},
                 'word_align': {
                     'word_s1_map': [],
@@ -331,6 +381,19 @@ class PowerCall:
                     new_word_hyp.append(word)
             new_word_hyp = self.remove_leading_blanks(new_word_hyp)
 
+            combined['ref_phones_by_word'] = self.split_items_between_pipes(combined['ref_phones'])
+            combined['hyp_phones_by_word'] = self.split_items_between_pipes(combined['hyp_phones'])
+
+            # print("ref_phones:", new_phone_ref)
+            # print("hyp_phones:", new_phone_hyp)
+            # print("s1_leading_blank_count:", s1_leading_blank_count)
+            # print("s2_leading_blank_count:", s2_leading_blank_count)
+            # print("phone_ref_position:", phone_ref_position)
+            # print("phone_hyp_position:", phone_hyp_position)
+            # print("ref_words:", new_word_ref)
+            # print("hyp_words:", new_word_hyp)
+
+
             combined['segment_ref_hyp_word_count_align'] = {
                 'ref_phones': new_phone_ref,
                 'hyp_phones': new_phone_hyp,
@@ -384,9 +447,6 @@ class PowerCall:
                     'eval': word_error_type_sequence,
                 }
             )
-            print('word_ref: ', word_ref)
-            print('word_hyp: ', word_hyp)
-            print('eval: ', word_error_type_sequence)
 
             # if aligner.phonetic_alignments[i]:
             #     phone_ref = aligner.phonetic_alignments[i].s1_tokens()

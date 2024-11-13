@@ -4,4 +4,5 @@ networkx
 nltk
 numpy
 Pyphen
-
+websockets
+pandas

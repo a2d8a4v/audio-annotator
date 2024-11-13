@@ -9,6 +9,10 @@
   margin: auto;
 }
 
+label_container {
+  height: 80px !important;
+}
+
 .scroll_div {
   width: auto;
   overflow-x: auto;

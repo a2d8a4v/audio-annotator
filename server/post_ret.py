@@ -25,13 +25,17 @@ class PostRet(BaseReqHandler):
                 "msg": ""}
         try:
             ret_json = self.json_args
-            print(ret_json)
+            uttid = ret_json["task"]["uttid"]
+
+            # drop fields
+            del ret_json["task"]
 
             logger.info(ret_json)
-            rel_wav_path = get_relative_path("/wavs", ret_json["task"]["url"])
-            wav_path = ret_json["task"]["url"]
-            file_name_without_extension = os.path.splitext(os.path.basename(wav_path))[0]
-            save_json_file_path = os.path.join(self.save_dir, file_name_without_extension + f".{self.json_suffix}.json")
+            # rel_wav_path = get_relative_path("/wavs", ret_json["task"]["url"])
+            # wav_path = ret_json["task"]["url"]
+            # file_name_without_extension = os.path.splitext(os.path.basename(wav_path))[0]
+            # save_json_file_path = os.path.join(self.save_dir, file_name_without_extension + f".{self.json_suffix}.json")
+            save_json_file_path = os.path.join(self.save_dir, uttid + f".{self.json_suffix}.json")
             with open(save_json_file_path, "w+", encoding="utf-8") as f:
                 json.dump(ret_json, f, ensure_ascii=False)
             resp["msg"] = "保存成功"

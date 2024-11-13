@@ -250,7 +250,6 @@ async def word_process_call():
     seconds_per_message = 0.1
 
     word_result = await get_word_result(word_server_port)
-
     if word_result:
         timestamps = word_result['timestamps']
         tokens = word_result['tokens']

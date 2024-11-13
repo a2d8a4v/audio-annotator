@@ -200,8 +200,8 @@ Annotator.prototype = {
             var proximityTags = my.currentTask.proximityTag;
             var annotationTags = my.currentTask.annotationTag;
             var annotationUtteranceScores = my.currentTask.annotationUtteranceScore;
-            var annotationWordScores = my.currentTask.annotationScore;
-            var annotationPhoneScores = my.currentTask.annotationScore;
+            var annotationWordScores = my.currentTask.annotationWordScore;
+            var annotationPhoneScores = my.currentTask.annotationPhoneScore;
             var alignCollect = my.currentTask.alignCollect;
 
             var tutorialVideoURL = my.currentTask.tutorialVideoURL;
@@ -213,6 +213,8 @@ Annotator.prototype = {
                 annotationTiers,
                 proximityTags,
                 annotationTags,
+                annotationPhoneScores,
+                annotationWordScores,
                 annotationUtteranceScores,
                 annotationSolutions,
                 alwaysShowTags,
@@ -355,6 +357,7 @@ Annotator.prototype = {
     // Make POST request, passing back the content data. On success load in the next task
     post: function (content) {
         var my = this;
+        console.log(postUrl);
         $.ajax({
             type: 'POST',
             url: postUrl,
