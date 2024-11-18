@@ -238,6 +238,7 @@ div.tag_container .annotation_tags_container {
 
 .submit_container {
   text-align: center;
+  padding-bottom: 20px;
 }
 
 .submit_container .btn,
@@ -384,7 +385,7 @@ th {
 }
 
 td input.annotation-input {
-  width: 100%;
+  width: 50px;
   padding-left: 4px;
   padding-right: 4px;
   box-sizing: border-box; /* Ensure padding and border are included in width */

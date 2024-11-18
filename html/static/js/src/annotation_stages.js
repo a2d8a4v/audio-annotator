@@ -320,8 +320,8 @@ StageThreeView.prototype = {
         const s2_leading_blank_count = segment_ref_hyp_word_count_align.s2_leading_blank_count;
         const phone_ref_position = segment_ref_hyp_word_count_align.phone_ref_position;
         const phone_hyp_position = segment_ref_hyp_word_count_align.phone_hyp_position;
-        const ref_words = segment_ref_hyp_word_count_align.ref_words;
-        const hyp_words = segment_ref_hyp_word_count_align.hyp_words;
+        const word_ref = segment_ref_hyp_word_count_align.word_ref;
+        const word_hyp = segment_ref_hyp_word_count_align.word_hyp;
 
         const phone_eval = alignCollect.phone_align.phone_eval;
         const word_eval = alignCollect.word_align.word_eval;
@@ -345,7 +345,6 @@ StageThreeView.prototype = {
                     my.anno_phone_scores[cellid] = {};
                 }
             }
-            console.log(god.length);
             for (let i = 0; i < god.length; i++) {
                 const cell = document.createElement("td");
                 if (type === "text") {
@@ -366,8 +365,9 @@ StageThreeView.prototype = {
                             input.min = 1;
                             input.max = 10;
                             input.step = 1;
-                            console.log(i);
-                            input.value = data[i].accuracy_score || "";
+                            if (i <= data.length - 1) {
+                                input.value = data[i].accuracy_score || "";
+                            }
                         } else {
                             input.value = data[i] || "";
                         }
@@ -429,7 +429,9 @@ StageThreeView.prototype = {
                         input.min = 1;
                         input.max = 10;
                         input.step = 1;
-                        input.value = data[i].word_accuracy || "";
+                        if (i <= data.length - 1) {
+                            input.value = data[i].word_accuracy || "";
+                        }
                     }
                     my.anno_word_scores[cellid][input_id] = input.value;
                     input.addEventListener('change', (event) => {
@@ -452,23 +454,23 @@ StageThreeView.prototype = {
         const phone_god_ref = ref_phones.map(char => (char === '|') ? 't' : 'f');
         const phone_god_hyp = hyp_phones.map(char => (char === '|') ? 't' : 'f');
 
-        console.log(ref_words);
+        console.log(word_ref);
         console.log(ref_phones);
-        console.log(hyp_words);
+        console.log(word_hyp);
         console.log(hyp_phones);
         console.log(phone_eval);
         console.log(annotationPhoneScores);
         
-        createMultiColumnRow("REF_W", ref_words, phone_ref_position, s1_leading_blank_count, 'text', false);
+        createMultiColumnRow("REF_W", word_ref, phone_ref_position, s1_leading_blank_count, 'text', false);
         createRow("REF_P", ref_phones, phone_god_ref);
-        createMultiColumnRow("HYP_W", hyp_words, phone_hyp_position, s2_leading_blank_count, 'text', false);
+        createMultiColumnRow("HYP_W", word_hyp, phone_hyp_position, s2_leading_blank_count, 'text', false);
         createRow("HYP_P", hyp_phones, phone_god_hyp);
         createRow("Eval", phone_eval, phone_god_hyp);
         createRow("Diag", hyp_phones, phone_god_hyp, 0, "input", false, 'diag_anno_');
         createRow("Score_P_accuracy", annotationPhoneScores, phone_god_hyp, s1_leading_blank_count, "input", true, 's_p_acc_anno_');
         createMultiColumnRow("Score_W_accuracy", annotationWordScores, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_acc_anno_');
-        createMultiColumnRow("Score_W_stress", ref_words, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_str_anno_');
-        createMultiColumnRow("Score_W_total", ref_words, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_tol_anno_');
+        createMultiColumnRow("Score_W_stress", word_ref, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_str_anno_');
+        createMultiColumnRow("Score_W_total", word_ref, phone_ref_position, s1_leading_blank_count, "input", true, 's_w_tol_anno_');
     
         return scrollableContainer.append(table);
     },

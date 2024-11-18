@@ -211,25 +211,26 @@ class GetTask(BaseReqHandler):
                 # 2. get the alignment information by concurrent ASR systems
 
                 # 2-1. by k2
-                try:
-                    k2_decoded_info_of_phone = await k2call_for_phone(wav_path)
-                    k2_decoded_info_of_word = await k2call_for_word(wav_path)
-                    k2_decoded_info_of_word, k2_decoded_info_of_phone = fix_timestamp(k2_decoded_info_of_word, k2_decoded_info_of_phone)
-                    phone_ctm_info = convert_time_alignment_to_ctm(uttid, k2_decoded_info_of_phone['phone']['time_alignment'])
-                    word_ctm_info = convert_time_alignment_to_ctm(uttid, k2_decoded_info_of_word['word']['time_alignment'])
-                    if not check_if_success_decoded(word_ctm_info, phone_ctm_info):
-                        phone_ctm_info = task_info[uttid][uttid]['ctm']
-                        word_ctm_info = task_info[uttid][uttid]['word_ctm']
-                        prompt = task_info[uttid][uttid]['prompt'].upper()
-                        stt = call_nltk_api(task_info[uttid][uttid]['stt'])
-                    else:
-                        prompt = task_info[uttid][uttid]['prompt'].upper()
-                        stt = k2_decoded_info_of_word['word']['text']
-                except:
-                    phone_ctm_info = task_info[uttid][uttid]['ctm']
-                    word_ctm_info = task_info[uttid][uttid]['word_ctm']
-                    prompt = task_info[uttid][uttid]['prompt'].upper()
-                    stt = call_nltk_api(task_info[uttid][uttid]['stt'])
+                # try:
+                #     k2_decoded_info_of_phone = await k2call_for_phone(wav_path)
+                #     k2_decoded_info_of_word = await k2call_for_word(wav_path)
+                #     k2_decoded_info_of_word, k2_decoded_info_of_phone = fix_timestamp(k2_decoded_info_of_word, k2_decoded_info_of_phone)
+                #     phone_ctm_info = convert_time_alignment_to_ctm(uttid, k2_decoded_info_of_phone['phone']['time_alignment'])
+                #     word_ctm_info = convert_time_alignment_to_ctm(uttid, k2_decoded_info_of_word['word']['time_alignment'])
+                #     if not check_if_success_decoded(word_ctm_info, phone_ctm_info):
+                #         phone_ctm_info = task_info[uttid][uttid]['ctm']
+                #         word_ctm_info = task_info[uttid][uttid]['word_ctm']
+                #         prompt = task_info[uttid][uttid]['prompt'].upper()
+                #         stt = call_nltk_api(task_info[uttid][uttid]['stt'])
+                #     else:
+                #         prompt = task_info[uttid][uttid]['prompt'].upper()
+                #         stt = k2_decoded_info_of_word['word']['text']
+                # except:
+                k2_decoded_info_of_phone = await k2call_for_phone(wav_path)
+                phone_ctm_info = task_info[uttid][uttid]['ctm']
+                word_ctm_info = task_info[uttid][uttid]['word_ctm']
+                prompt = task_info[uttid][uttid]['prompt'].upper()
+                stt = call_nltk_api(task_info[uttid][uttid]['stt'])
                     
                 print(uttid)
 
@@ -245,6 +246,8 @@ class GetTask(BaseReqHandler):
                 #     k2_decoded_info_of_phone
                 # )
                 aligner_collect = self.handle_request(prompt, stt, k2_decoded_info_of_phone)
+
+                print(aligner_collect)
 
                 if not phone_score_annotations and apa_ret is not None:
                     max_length = len(aligner_collect['ref_phones_by_word'])

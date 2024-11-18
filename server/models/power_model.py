@@ -1,3 +1,4 @@
+import copy
 from power.aligner import PowerAligner
 from power.levenshtein import ExpandedAlignment
 
@@ -7,6 +8,8 @@ class PowerCall:
         # lexicon = "lex/cmudict.0.7a.json"
         # lexicon = "lex/cmudict.rep.json"
         self.lexicon = "lex/lexicon.json"
+        self.blank = '<blank>'
+        self.filler = 'yan'
 
     def _collapse_list(self, seq):
         return list(dict.fromkeys(seq))
@@ -75,6 +78,16 @@ class PowerCall:
                 return lst[i:]  # Return the list starting from the first non-empty element
         return []  # Return an empty list if all elements are empty
 
+    def select_better_word_result(self, word_seq_1, word_seq_2):
+        word_seq_1 = [w for w in word_seq_1 if w]
+        word_seq_2 = [w for w in word_seq_2 if w]
+        if len(word_seq_1) > len(word_seq_2):
+            return word_seq_1
+        elif len(word_seq_1) < len(word_seq_2):
+            return word_seq_2
+        else:
+            return word_seq_1
+
     def power_alignment_with_phone_sequence(self, ref, hyp, phone_object):
 
         aligner = PowerAligner(ref, hyp, lowercase=True, lexicon=self.lexicon)
@@ -88,8 +101,8 @@ class PowerCall:
 
             """
             {
-                'ref_words': ref_words,
-                'hyp_words': hyp_words,
+                'word_ref': word_ref,
+                'word_hyp': word_hyp,
                 'ref_phones': ref_phones,
                 'hyp_phones': hyp_phones,
                 'word_align': None,
@@ -97,35 +110,49 @@ class PowerCall:
             }
             """
             # word level
-            ref_words = self.align_pair(collect_split_regions[i], 'ref')
-            hyp_words = self.align_pair(collect_split_regions[i], 'hyp')
-            word_ref = collect_split_regions[i].s1_tokens()
-            word_s1_map = collect_split_regions[i].s1_map
-            word_hyp = collect_split_regions[i].s2_tokens()
-            word_s2_map = collect_split_regions[i].s2_map
+            word_ref = self.select_better_word_result(self.align_pair(collect_split_regions[i], 'ref'), collect_split_regions[i].s1_tokens())
+            word_hyp = self.select_better_word_result(self.align_pair(collect_split_regions[i], 'hyp'), collect_split_regions[i].s2_tokens())
+            # word_s1_map = collect_split_regions[i].s1_map
+            # word_s2_map = collect_split_regions[i].s2_map
             word_eval = collect_split_regions[i].align
 
-            info['ref_words'] = ref_words
-            info['hyp_words'] = hyp_words
+            word_ref = [w if w else self.filler for w in word_ref]
+            word_hyp = [w if w else self.filler for w in word_hyp]
+
+            fixed_word_ref = []
+            fixed_word_hyp = []
+            iter_word_ref = iter(word_ref)
+            iter_word_hyp = iter(word_hyp)
+            for e in word_eval:
+                if e == 'C':
+                    fixed_word_ref.append(next(iter_word_ref))
+                    fixed_word_hyp.append(next(iter_word_hyp))
+                elif e == 'S':
+                    fixed_word_ref.append(next(iter_word_ref))
+                    fixed_word_hyp.append(next(iter_word_hyp))
+                elif e == 'I':
+                    # fixed_word_ref.append(self.blank)
+                    fixed_word_ref.append(self.filler)
+                    fixed_word_hyp.append(next(iter_word_hyp))
+                elif e == 'D':
+                    fixed_word_ref.append(next(iter_word_ref))
+                    # fixed_word_hyp.append(self.blank)
+                    fixed_word_hyp.append(self.filler)
+
+            word_ref = fixed_word_ref
+            word_hyp = fixed_word_hyp
+
+            info['word_ref'] = word_ref
+            info['word_hyp'] = word_hyp
             info['word_align'] = {
-                'word_ref': word_ref,
-                'word_s1_map': word_s1_map,
-                'word_hyp': word_hyp, 
-                'word_s2_map': word_s2_map,
+                # 'word_s1_map': word_s1_map,
+                # 'word_s2_map': word_s2_map,
                 'word_eval': word_eval,
             }
 
-            # print(i)
-            # print(ref_words)
-            # print(hyp_words)
-            # print(word_ref)
-            # print(word_s1_map)
-            # print(word_hyp)
-            # print(word_s2_map)
-            # print(word_eval)
-
             # phone level
             if info['phone_align'] is not None:
+                print('if info[phone_align] is not None:')
                 phone_ref = aligner.phonetic_alignments[i].s1_tokens()
                 phone_s1_map = aligner.phonetic_alignments[i].s1_map
                 phone_hyp = aligner.phonetic_alignments[i].s2_tokens()
@@ -139,24 +166,69 @@ class PowerCall:
                     phone_s1_map = [i + s1_map_start_index for i , t in enumerate(phone_eval[s1_map_start_index:]) if t != 'I']
                     phone_s1_map.append(phone_s1_map[-1]+1)
 
-                # fix the last missing '|'
-                if '|' != phone_ref[-1]:
-                    phone_ref.append('|')
-                    phone_hyp.append('|')
-                    phone_eval.append('C') # because they are '|'
-                    # assert phone_s2_map, 'phone_s2_map is empty'
-                    if not phone_s2_map:
-                        print('phone_s2_map is empty')
-                    phone_s1_map.append(phone_s1_map[-1]+1)
-                    if phone_s2_map:
-                        phone_s2_map.append(phone_s2_map[-1]+1)
+                fixed_phone_ref = []
+                fixed_phone_hyp = []
+                iter_phone_ref = iter(phone_ref)
+                iter_phone_hyp = iter(phone_hyp)
+                for e in phone_eval:
+                    if e == 'C':
+                        fixed_phone_ref.append(next(iter_phone_ref))
+                        fixed_phone_hyp.append(next(iter_phone_hyp))
+                    elif e == 'S':
+                        fixed_phone_ref.append(next(iter_phone_ref))
+                        fixed_phone_hyp.append(next(iter_phone_hyp))
+                    elif e == 'I':
+                        fixed_phone_ref.append(self.blank)
+                        fixed_phone_hyp.append(next(iter_phone_hyp))
+                    elif e == 'D':
+                        fixed_phone_ref.append(next(iter_phone_ref))
+                        fixed_phone_hyp.append(self.blank)
+                phone_ref = fixed_phone_ref
+                phone_hyp = fixed_phone_hyp
 
-                # print('A')
-                # print(phone_ref)
-                # print(phone_hyp)
-                # print(phone_s1_map)
-                # print(phone_s2_map)
-                # print(phone_eval)
+                # fix the last missing '|'
+                add_eval = False
+                if len(phone_ref) > len(phone_hyp):
+                    if '|' != phone_ref[-1] and '|' == phone_hyp[-1]:
+                        phone_ref.append('|')
+                        phone_s1_map.append(phone_s1_map[-1]+1)
+                        add_eval = True
+                    elif '|' != phone_ref[-1] and '|' != phone_hyp[-1]:
+                        phone_ref.append('|')
+                        phone_hyp.append('|')
+                        phone_s1_map.append(phone_s1_map[-1]+1)
+                        phone_s2_map.append(phone_s2_map[-1]+1)
+                        add_eval = True
+                elif len(phone_ref) < len(phone_hyp):
+                    if '|' != phone_hyp[-1] and '|' == phone_ref[-1]:
+                        phone_hyp.append('|')
+                        phone_s2_map.append(phone_s2_map[-1]+1)
+                        add_eval = True
+                    if '|' != phone_hyp[-1] and '|' != phone_ref[-1]:
+                        phone_ref.append('|')
+                        phone_hyp.append('|')
+                        phone_s1_map.append(phone_s1_map[-1]+1)
+                        phone_s2_map.append(phone_s2_map[-1]+1)
+                        add_eval = True
+                else:
+                    if '|' != phone_ref[-1]:
+                        phone_ref.append('|')
+                        phone_hyp.append('|')
+                        phone_s1_map.append(phone_s1_map[-1]+1)
+                        phone_s2_map.append(phone_s2_map[-1]+1)
+                    add_eval = True
+
+                if add_eval:
+                    phone_eval.append('C')
+
+                assert ((len(phone_eval) == len(phone_ref)) | (len(phone_eval) == len(phone_hyp)))
+
+                print('A')
+                print(phone_ref, len(phone_ref))
+                print(phone_hyp, len(phone_hyp))
+                print(phone_s1_map)
+                print(phone_s2_map)
+                print(phone_eval)
 
                 info['phone_align'] = {
                     'phone_ref': phone_ref,
@@ -166,9 +238,12 @@ class PowerCall:
                     'phone_eval': phone_eval,
                 }
             else:
+                print('if info[phone_align] is None:')
+                # they are almost the same two sequence
                 # they should be the same length of sequences
-                ref_phones = aligner.pronouncer.pronounce(ref_words)
-                hyp_phones = aligner.pronouncer.pronounce(hyp_words)
+
+                ref_phones = aligner.pronouncer.pronounce(word_ref)
+                hyp_phones = aligner.pronouncer.pronounce(word_hyp)
                 phone_s1_map = []
                 phone_s2_map = []
                 phone_eval = []
@@ -178,12 +253,12 @@ class PowerCall:
                 new_phone_ref = []
                 new_phone_hyp = []
 
-                # print('B')
-                # print(ref_phones)
-                # print(hyp_phones)
-                # print(phone_s1_map)
-                # print(phone_s2_map)
-                # print(phone_eval)
+                print('B')
+                print(ref_phones)
+                print(hyp_phones)
+                print(phone_s1_map)
+                print(phone_s2_map)
+                print(phone_eval)
 
                 phone_pa = PowerAligner(str_ref_phones, str_hyp_phones, lowercase=True, lexicon=self.lexicon)
                 phone_pa.align()
@@ -193,9 +268,43 @@ class PowerCall:
                 for ii in range(len(phone_pa_region)):
                     phone_seg_ref = self.align_pair(phone_pa_region[ii], 'ref')
                     phone_seg_hyp = self.align_pair(phone_pa_region[ii], 'hyp')
+                    phone_seg_ref = [p if p else self.blank for p in phone_seg_ref]
+                    phone_seg_hyp = [p if p else self.blank for p in phone_seg_hyp]
+                    # Split each item in the lists by spaces
+                    """
+                        phone_seg_ref:  ['hh ae', 'v']                                                                                                                                                          
+                        phone_seg_hyp:  ['t', 'uw']
+                    """
+                    phone_seg_ref = [seg for item in phone_seg_ref for seg in item.split()]
+                    phone_seg_hyp = [seg for item in phone_seg_hyp for seg in item.split()]
+
                     phone_seg_s1_map = phone_pa_region[ii].s1_map
                     phone_seg_s2_map = phone_pa_region[ii].s2_map
                     phone_seg_eval = phone_pa_region[ii].align
+
+                    # print('phone_seg_ref.b: ', phone_seg_ref)
+                    # print('phone_seg_hyp.b: ', phone_seg_hyp)
+                    # print('phone_seg_eval.b: ', phone_seg_eval)
+
+                    # Adjust the length of phone_seg_hyp to match phone_seg_ref by inserting empty strings
+                    tmp_append_num = 0
+                    if len(phone_seg_ref) > len(phone_seg_hyp):
+                        phone_seg_hyp = [self.blank] * (len(phone_seg_ref) - len(phone_seg_hyp)) + phone_seg_hyp
+                        phone_seg_eval = ['D'] * (len(phone_seg_ref) - len(phone_seg_hyp)) + phone_seg_eval
+                        tmp_append_num = len(phone_seg_ref) - len(phone_seg_hyp)
+                        phone_seg_s1_map = [i + tmp_append_num for i in phone_seg_s1_map]
+                        phone_seg_s1_map = list(range(min(phone_seg_s1_map) - tmp_append_num, min(phone_seg_s1_map), 1)) + phone_seg_s1_map
+                    if len(phone_seg_ref) < len(phone_seg_hyp):
+                        phone_seg_ref = [self.blank] * (len(phone_seg_hyp) - len(phone_seg_ref)) + phone_seg_ref
+                        phone_seg_eval = ['I'] * (len(phone_seg_hyp) - len(phone_seg_ref)) + phone_seg_eval
+                        tmp_append_num = len(phone_seg_ref) - len(phone_seg_hyp)
+                        phone_seg_s1_map = [i + tmp_append_num for i in phone_seg_s1_map]
+                        phone_seg_s1_map = list(range(min(phone_seg_s1_map) - tmp_append_num, min(phone_seg_s1_map), 1)) + phone_seg_s1_map
+
+                    # print('phone_seg_ref.a: ', phone_seg_ref)
+                    # print('phone_seg_hyp.a: ', phone_seg_hyp)
+                    # print('phone_seg_eval.a: ', phone_seg_eval)
+
                     phone_seg_s1_map = [i + seg_phone_index for i in phone_seg_s1_map]
                     phone_seg_s2_map = [i + seg_phone_index for i in phone_seg_s2_map]
                     phone_s1_map.extend(phone_seg_s1_map)
@@ -206,13 +315,10 @@ class PowerCall:
 
                     seg_phone_index += len(phone_seg_eval)
 
-                ref_phones = ' '.join(new_phone_ref)
-                hyp_phones = ' '.join(new_phone_hyp)
-
                 info['phone_align'] = {
-                    'phone_ref': ref_phones,
+                    'phone_ref': new_phone_ref,
                     'phone_s1_map': phone_s1_map,
-                    'phone_hyp': hyp_phones,
+                    'phone_hyp': new_phone_hyp,
                     'phone_s2_map': phone_s2_map,
                     'phone_eval': phone_eval,
                 }
@@ -224,33 +330,30 @@ class PowerCall:
         # assert len(new_aligner_collect) < 1
         if len(new_aligner_collect) == 1:
             aligner_collect = new_aligner_collect[0]
-            print(aligner_collect['ref_words'])
-            print(aligner_collect['ref_phones'])
-            print(aligner_collect['hyp_words'])
-            print(aligner_collect['hyp_phones'])
-            print(self.count_items_between_pipes(aligner_collect['ref_phones']))
-            print(self.count_items_between_pipes(aligner_collect['hyp_phones']))
-            
+            print('if len(new_aligner_collect) == 1:')
+            # print(aligner_collect['word_ref'])
+            # print(aligner_collect['ref_phones'])
+            # print(aligner_collect['word_hyp'])
+            # print(aligner_collect['hyp_phones'])
+            # print(self.count_items_between_pipes(aligner_collect['ref_phones']))
+            # print(self.count_items_between_pipes(aligner_collect['hyp_phones']))
+
             new_aligner_collect = {
-                'ref_words': aligner_collect['ref_words'],
-                'ref_phones': aligner_collect['ref_phones'],
-                'hyp_words': aligner_collect['hyp_words'],
-                'hyp_phones': aligner_collect['hyp_phones'],
-                'ref_phones_by_word': self.split_items_between_pipes(aligner_collect['ref_phones']),
-                'hyp_phones_by_word': self.split_items_between_pipes(aligner_collect['hyp_phones']),
+                'ref_phones_by_word': self.split_items_between_pipes(aligner_collect['phone_align']['phone_ref']),
+                'hyp_phones_by_word': self.split_items_between_pipes(aligner_collect['phone_align']['phone_hyp']),
                 'segment_ref_hyp_word_count_align': {
-                    'ref_phones': aligner_collect['ref_phones'],
-                    'hyp_phones': aligner_collect['hyp_phones'],
+                    'ref_phones': aligner_collect['phone_align']['phone_ref'],
+                    'hyp_phones': aligner_collect['phone_align']['phone_hyp'],
                     's1_leading_blank_count': 0,
                     's2_leading_blank_count': 0,
-                    'phone_ref_position': self.count_items_between_pipes(aligner_collect['ref_phones']),
-                    'phone_hyp_position': self.count_items_between_pipes(aligner_collect['hyp_phones']),
-                    'ref_words': aligner_collect['ref_words'],
-                    'hyp_words': aligner_collect['hyp_words'],
+                    'phone_ref_position': self.count_items_between_pipes(aligner_collect['phone_align']['phone_ref']),
+                    'phone_hyp_position': self.count_items_between_pipes(aligner_collect['phone_align']['phone_hyp']),
+                    'word_ref': aligner_collect['word_ref'],
+                    'word_hyp': aligner_collect['word_hyp'],
                 },
                 'word_align': {
-                    'word_s1_map': aligner_collect['word_align']['word_s1_map'],
-                    'word_s2_map': aligner_collect['word_align']['word_s2_map'],
+                    # 'word_s1_map': aligner_collect['word_align']['word_s1_map'],
+                    # 'word_s2_map': aligner_collect['word_align']['word_s2_map'],
                     'word_eval': aligner_collect['word_align']['word_eval'],
                 },
                 'phone_align': {
@@ -261,20 +364,17 @@ class PowerCall:
             }
 
         else:
+            print('if len(new_aligner_collect) > 1:')
             new_aligner_collect = dict(sorted(new_aligner_collect.items())) # key ascending sort
 
             # Combine the segments
             combined = {
-                'ref_words': [],
-                'ref_phones': [],
-                'hyp_words': [],
-                'hyp_phones': [],
                 'ref_phones_by_word': [],
                 'hyp_phones_by_word': [],
                 'segment_ref_hyp_word_count_align': {},
                 'word_align': {
-                    'word_s1_map': [],
-                    'word_s2_map': [],
+                    # 'word_s1_map': [],
+                    # 'word_s2_map': [],
                     'word_eval': []
                 },
                 'phone_align': {
@@ -287,21 +387,26 @@ class PowerCall:
             # Initialize index counters
             word_index = 0
             phone_index = 0
+            new_phone_ref = []
+            new_phone_hyp = []
+            collect_word_ref = []
+            collect_word_hyp = []
 
             # Process each segment in order
             for key, segment in new_aligner_collect.items():
-                # Concatenate hyp_words
-                combined['ref_words'].extend(segment['ref_words'])
-                combined['hyp_words'].extend(segment['hyp_words'])
+                # Concatenate word_hyp
+                collect_word_ref.extend(segment['word_ref'])
+                collect_word_hyp.extend(segment['word_hyp'])
                 
                 # Update word_align
-                combined['word_align']['word_s1_map'].extend([i + word_index for i in segment['word_align']['word_s1_map']])
-                combined['word_align']['word_s2_map'].extend([i + word_index for i in segment['word_align']['word_s2_map']])
+                # combined['word_align']['word_s1_map'].extend([i + word_index for i in segment['word_align']['word_s1_map']])
+                # combined['word_align']['word_s2_map'].extend([i + word_index for i in segment['word_align']['word_s2_map']])
                 combined['word_align']['word_eval'].extend(segment['word_align']['word_eval'])
                 
                 # Concatenate hyp_phones and skip leading '|'
-                hyp_phones = segment['hyp_phones']
-                ref_phones = segment['ref_phones']
+                hyp_phones = segment['phone_align']['phone_hyp']
+                ref_phones = segment['phone_align']['phone_ref']
+
                 phone_s1_map = segment['phone_align']['phone_s1_map']
                 phone_s2_map = segment['phone_align']['phone_s2_map']
                 phone_eval = segment['phone_align']['phone_eval']
@@ -320,39 +425,44 @@ class PowerCall:
                     phone_eval = phone_eval[1:]
                     phone_s1_map = [i - 1 for i in phone_s1_map] # because we remove the leading character, we need to eliminate 1 to each of index
                     phone_s2_map = [i - 1 for i in phone_s2_map]
-                combined['hyp_phones'].extend(hyp_phones)
-                combined['ref_phones'].extend(ref_phones)
+
+                new_phone_ref.extend(ref_phones)
+                new_phone_hyp.extend(hyp_phones)
                 combined['phone_align']['phone_s1_map'].extend([i + phone_index for i in phone_s1_map])
                 combined['phone_align']['phone_s2_map'].extend([i + phone_index for i in phone_s2_map])
                 combined['phone_align']['phone_eval'].extend(phone_eval)
-                
-                # Align
-                # combined['segment_ref_hyp_phone_count_align'][key] = [len(ref_phones), len(hyp_phones)]
 
                 # Update indices
-                word_index += len(segment['hyp_words'])
+                word_index += len(segment['word_hyp'])
                 phone_index += len(segment['hyp_phones']) - 1 if key > 0 else len(segment['hyp_phones']) # Subtracting one for skipped '|'
 
             # post-process
-            a = combined['ref_phones']
-            b = combined['hyp_phones']
+            # a = copy.deepcopy(new_phone_ref)
+            # b = copy.deepcopy(new_phone_hyp)
+            # print('debug.new_phone_ref: ', new_phone_ref)
+            # print('debug.new_phone_hyp: ', new_phone_hyp)
             c = combined['phone_align']['phone_s1_map']
             d = combined['phone_align']['phone_s2_map']
             e = combined['phone_align']['phone_eval']
+            # del new_phone_ref
+            # del new_phone_hyp
 
-            new_phone_ref = []
-            new_phone_hyp = []
-            iter_a, iter_b = iter(a), iter(b)
+            # new_phone_ref = []
+            # new_phone_hyp = []
+            # iter_a, iter_b = iter(a), iter(b)
             # print('a: ', a, len(a))
             # print('b: ', b, len(b))
-            # print('c: ', c)
+            # print('c: ', c, len(c))
             # print('d: ', d)
             # print('e: ', e, len(e))
 
-            for i in range(0, len(e)):
-                # print(i)
-                new_phone_ref.append(next(iter_a, '') if i in c else '')
-                new_phone_hyp.append(next(iter_b, '') if i in d else '')
+            # for i in range(0, len(e)):
+            #     # print(i)
+            #     new_phone_ref.append(next(iter_a, '') if i in c else '')
+            #     new_phone_hyp.append(next(iter_b, '') if i in d else '')
+
+            # print('debug.A.new_phone_ref: ', new_phone_ref)
+            # print('debug.A.new_phone_hyp: ', new_phone_hyp)
 
             s1_leading_blank_count = c[0]
             s2_leading_blank_count = d[0]
@@ -360,8 +470,11 @@ class PowerCall:
             phone_ref_position = self.count_items_between_pipes(new_phone_ref)
             phone_hyp_position = self.count_items_between_pipes(new_phone_hyp)
 
-            a = combined['ref_words']
-            b = combined['hyp_words']
+            # print('debug.B.new_phone_ref: ', new_phone_ref)
+            # print('debug.B.new_phone_hyp: ', new_phone_hyp)
+
+            a = copy.deepcopy(collect_word_ref)
+            b = copy.deepcopy(collect_word_hyp)
             new_word_ref = []
             new_word_hyp = []
             for word in a:
@@ -381,18 +494,17 @@ class PowerCall:
                     new_word_hyp.append(word)
             new_word_hyp = self.remove_leading_blanks(new_word_hyp)
 
-            combined['ref_phones_by_word'] = self.split_items_between_pipes(combined['ref_phones'])
-            combined['hyp_phones_by_word'] = self.split_items_between_pipes(combined['hyp_phones'])
+            combined['ref_phones_by_word'] = self.split_items_between_pipes(new_phone_ref)
+            combined['hyp_phones_by_word'] = self.split_items_between_pipes(new_phone_hyp)
 
-            # print("ref_phones:", new_phone_ref)
-            # print("hyp_phones:", new_phone_hyp)
-            # print("s1_leading_blank_count:", s1_leading_blank_count)
-            # print("s2_leading_blank_count:", s2_leading_blank_count)
-            # print("phone_ref_position:", phone_ref_position)
-            # print("phone_hyp_position:", phone_hyp_position)
-            # print("ref_words:", new_word_ref)
-            # print("hyp_words:", new_word_hyp)
-
+            print("ref_phones:", new_phone_ref)
+            print("hyp_phones:", new_phone_hyp)
+            print("s1_leading_blank_count:", s1_leading_blank_count)
+            print("s2_leading_blank_count:", s2_leading_blank_count)
+            print("phone_ref_position:", phone_ref_position)
+            print("phone_hyp_position:", phone_hyp_position)
+            print("word_ref:", new_word_ref)
+            print("word_hyp:", new_word_hyp)
 
             combined['segment_ref_hyp_word_count_align'] = {
                 'ref_phones': new_phone_ref,
@@ -401,8 +513,8 @@ class PowerCall:
                 's2_leading_blank_count': s2_leading_blank_count,
                 'phone_ref_position': phone_ref_position,
                 'phone_hyp_position': phone_hyp_position,
-                'ref_words': new_word_ref,
-                'hyp_words': new_word_hyp,
+                'word_ref': new_word_ref,
+                'word_hyp': new_word_hyp,
             }
 
             new_aligner_collect = combined
@@ -412,8 +524,8 @@ class PowerCall:
         # phone_object
 
         # print('------------')
-        # print(new_aligner_collect['ref_words'])
-        # print(new_aligner_collect['hyp_words'])
+        # print(new_aligner_collect['word_ref'])
+        # print(new_aligner_collect['word_hyp'])
 
         # print(new_aligner_collect['ref_phones'])
         # print(new_aligner_collect['hyp_phones'])
@@ -423,6 +535,8 @@ class PowerCall:
         # print(new_aligner_collect['phone_align']['phone_eval'])
         # print(combined['segment_ref_hyp_word_count_align'])
         # print('------------')
+
+        print(new_aligner_collect.keys())
 
         return new_aligner_collect
 
@@ -464,10 +578,10 @@ class PowerCall:
             #         }
             #     )
             # else:
-            #     ref_phones = aligner.pronouncer.pronounce(ref_words)
-            #     hyp_phones = aligner.pronouncer.pronounce(hyp_words)
+            #     ref_phones = aligner.pronouncer.pronounce(word_ref)
+            #     hyp_phones = aligner.pronouncer.pronounce(word_hyp)
 
-            #     power_seg_alignment, phonetic_alignments[error_index] = PowerAligner.phoneAlignToWordAlign(ref_words, hyp_words, 
+            #     power_seg_alignment, phonetic_alignments[error_index] = PowerAligner.phoneAlignToWordAlign(word_ref, word_hyp, 
             #         ref_phones, hyp_phones)
             #     collect_phone_error_type_sequence.append(
             #         {
