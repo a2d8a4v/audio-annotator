@@ -3,6 +3,7 @@ python run.py --host 0.0.0.0 \
               --port 8282 \
               --apa_dir /home/jtlee/projects/capttesting/exp_apa_20241021/prompt-based/azure \
               --wav_dir /home/jtlee/projects/data_process/EZAI_Championship2023/exp_rocling2024/asr-based/whisper \
+              --audio_dir /home/jtlee/projects/data_process/EZAI_Championship2023/audio-annotator/audio_data \
               --reference_dir /home/jtlee/projects/data_process/EZAI_Championship2023/exp_apa_20241021 \
               --save_dir save_json \
               --json_suffix label \

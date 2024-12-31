@@ -1,1 +1,0 @@
-/home/jtlee/projects/ASR/power-asr/lex

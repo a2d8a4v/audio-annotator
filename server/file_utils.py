@@ -10,6 +10,7 @@ import base64
 
 def list_files_from_reference(audio_root_dir, reference_dir, quotechar=None):
     ret = {}
+    utt2promptlen = {}
     csv_files = glob.glob(os.path.join(reference_dir, '**', '*.csv'), recursive=True)
     
     for csv_file in csv_files:
@@ -24,6 +25,8 @@ def list_files_from_reference(audio_root_dir, reference_dir, quotechar=None):
             if 'UttID' in columns:
                 uttid_idx = columns.index('UttID')
                 level_idx = columns.index('Level')
+                prompt_idx = columns.index('Prompt')
+                utt2promptlen.update({line[uttid_idx]: len(line[prompt_idx].split()) for line in lines})
                 ret.update({line[uttid_idx]: line[level_idx] for line in lines})
             else:
                 print(f"'UttID' column not found in file {csv_file}")
@@ -32,8 +35,19 @@ def list_files_from_reference(audio_root_dir, reference_dir, quotechar=None):
     utt2level = {}
     for uttid, level in ret.items():
         wav_dir = os.path.join(audio_root_dir, level, uttid)
+
+        # if uttid in ['4303333']:
+        #     continue
+
+        if uttid not in ['4167740']:
+            continue
+
+        # if utt2promptlen[uttid] <= 20:
+        #     continue
+
         n_ret[uttid] = wav_dir
         utt2level[uttid] = level
+
     return n_ret, utt2level
 
 def list_files(root_dir, suffix, recursion=True):

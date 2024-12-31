@@ -23,7 +23,7 @@ from server.file_utils import list_files, list_files_from_reference, find_child_
 from server.models.power_model import PowerCall
 
 from asr.k2_asr_api import k2call_for_phone, k2call_for_word, fix_timestamp, convert_time_alignment_to_ctm, check_if_success_decoded
-from nlp.nltk_api import call_nltk_api
+from nlp.nltk_api import call_nltk_api, remove_punctuation
 
 logging.basicConfig(filename='handler_errors.log', level=logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -34,28 +34,32 @@ class GetTask(BaseReqHandler):
         super().__init__(application, request, **kwargs)
         self.apa_dir = application.settings["settings"]["apa_dir"]
         self.wav_dir = application.settings["settings"]["wav_dir"]
+        self.audio_dir = application.settings["settings"]["audio_dir"]
         self.info_dir = application.settings["settings"]["info_dir"]
         self.save_dir = application.settings["settings"]["save_dir"]
         self.reference_dir = application.settings["settings"]["reference_dir"]
         self.json_suffix = application.settings["settings"]["json_suffix"]
 
         self.pattern = r'[0-9]+'
+        self.filler_default_number = 0
 
-    def _get_task(self, tmp_wavs_key="all", record="record", utt2level="utt2level", wav_suffix=".wav", review=False):
+    def _get_task(self, which_task="next", tmp_wavs_key="all", record="record", utt2level="utt2level", wav_suffix=".wav", review=False):
         
         """
             self.application.settings remember what wav file has been loaded
         """
-
+        do_not_change_me = None
         if tmp_wavs_key not in self.application.settings:
-            self.application.settings[tmp_wavs_key], self.application.settings[utt2level] = list_files_from_reference(self.wav_dir, self.reference_dir)
+            do_not_change_me, self.application.settings[utt2level] = list_files_from_reference(self.wav_dir, self.reference_dir)
             self.application.settings.setdefault(
                 record,
                 []
             )
+            self.application.settings[tmp_wavs_key] = copy.deepcopy(do_not_change_me)
         else:
             ## fix the bug that refresh page loss the last file
-            utt2audio_dir, _ = list_files_from_reference(self.wav_dir, self.reference_dir)
+            do_not_change_me, _ = list_files_from_reference(self.wav_dir, self.reference_dir)
+            utt2audio_dir = copy.deepcopy(do_not_change_me)
             for uttid in self.application.settings[record]:
                 del utt2audio_dir[uttid]
             self.application.settings[tmp_wavs_key] = utt2audio_dir
@@ -65,19 +69,40 @@ class GetTask(BaseReqHandler):
             return None, None, None
 
         before_change_all = copy.deepcopy(self.application.settings[tmp_wavs_key]) # dict should not change size when iteration
-        for uttid, audio_dir in before_change_all.items():
-            level = self.application.settings[utt2level][uttid]
-            if review:
-                del self.application.settings[tmp_wavs_key][uttid]
-                self.application.settings[record].append(uttid)
-                return uttid, audio_dir, level
-            else:
-                read_json_file_path = os.path.join(self.save_dir, uttid + f".{self.json_suffix}.json")
-                if os.path.exists(read_json_file_path) and os.path.getsize(read_json_file_path) > 0:
+
+        if which_task == 'next':
+            for i, (uttid, audio_dir) in enumerate(before_change_all.items()):
+                level = self.application.settings[utt2level][uttid]
+                if review:
                     del self.application.settings[tmp_wavs_key][uttid]
                     self.application.settings[record].append(uttid)
-                else:
                     return uttid, audio_dir, level
+                else:
+                    read_json_file_path = os.path.join(self.save_dir, uttid + f".{self.json_suffix}.json")
+                    if os.path.exists(read_json_file_path) and os.path.getsize(read_json_file_path) > 0:
+                        del self.application.settings[tmp_wavs_key][uttid]
+                        self.application.settings[record].append(uttid)
+                    else:
+                        return uttid, audio_dir, level
+        elif which_task == 'previous':
+            if self.application.settings[record]:
+                last_uttid = self.application.settings[record].pop()
+                level = self.application.settings[utt2level][last_uttid]
+                last_audio_dir = do_not_change_me[last_uttid]
+                self.application.settings[tmp_wavs_key][last_uttid] = last_audio_dir
+                return last_uttid, last_audio_dir, level
+            else:
+                # record is empty
+                return None, None, None
+        elif which_task == 'nextnosubmit':
+            uttidtmplist = list(self.application.settings[tmp_wavs_key].keys())
+            nextuttid = uttidtmplist[0]
+            nextaudio_dir = self.application.settings[tmp_wavs_key][nextuttid]
+            level = self.application.settings[utt2level][nextuttid]
+            del self.application.settings[tmp_wavs_key][nextuttid]
+            self.application.settings[record].append(nextuttid)
+            return nextuttid, nextaudio_dir, level
+
         return None, None, None
 
     def _load_phone_inventory(self, inventory_file_path):
@@ -110,26 +135,34 @@ class GetTask(BaseReqHandler):
         try:
             # Main request handling logic
             power_alignment = PowerCall()
+            print('prompt: ', prompt)
+            print('stt: ', stt)
             aligner_collect = power_alignment.power_alignment_with_phone_sequence(
                 prompt,
                 stt,
-                k2_decoded_info_of_phone
+                k2_decoded_info_of_phone,
+                addback_stress=False
             )
             return aligner_collect
         except Exception as e:
 
             # Option 2: Log the error for later debugging
-            logging.error(f"An error occurred: {e}")
+            detailed_error = traceback.format_exc()
+            print(f"An error occurred: {e}\n{detailed_error}")
+
 
     async def get(self):
         try:
             review = self.get_argument('review', default="false")
+            record = self.get_argument('record', default="record")
             wav_name = self.get_argument('wav_name', default=".wav")
             user_id = self.get_argument("user_id", default="all")
+            which_task = self.get_argument("mode", default="next")
 
             tmp_wavs_key = user_id + wav_name
-            uttid, audio_dir, level = self._get_task(tmp_wavs_key=tmp_wavs_key, record="record", wav_suffix=wav_name, review=(review == "true"))
-            # uttid, audio_dir, level = self.handle_request(tmp_wavs_key, review, wav_name, user_id)
+            # uttid, audio_dir, level = self._get_task(which_task=which_task, tmp_wavs_key=tmp_wavs_key, record=record, wav_suffix=wav_name, review=(review == "true"))
+            uttid, audio_dir, level = self._get_task(which_task=which_task, tmp_wavs_key=tmp_wavs_key, record=record, wav_suffix=wav_name, review=True)
+            #  uttid, audio_dir, level = self.handle_request(tmp_wavs_key, review, wav_name, user_id)
 
             inventory = self._load_phone_inventory(self.application.settings["settings"]["inventory_file_path"])
 
@@ -173,7 +206,7 @@ class GetTask(BaseReqHandler):
                             accuracy_score = task_ret['phone_score_annotations']['s_p_acc_anno_'].get(f's_p_acc_anno_{i}', '')
                             
                             # Convert accuracy_score to integer if it's not empty, otherwise set to 1
-                            accuracy_score = int(accuracy_score) if accuracy_score else 1
+                            accuracy_score = int(float(accuracy_score)) if accuracy_score else 1
                             
                             # Append each dictionary to the phone_score_annotations list
                             phone_score_annotations.append({
@@ -196,17 +229,20 @@ class GetTask(BaseReqHandler):
                             for word_info in apa_ret['word_scores']:
                                 word_score = {
                                     'word_accuracy': self.rounding(word_info['accuracy_score']),
-                                    'word_stress': 1,
-                                    'word_total': 1,
+                                    'word_stress': self.filler_default_number,
+                                    'word_total': self.filler_default_number,
                                 }
                                 word_score_annotations.append(word_score)
 
                 # 1. get the preloaded alignment information (by Whisper)
+                print(info_json_file_path)
                 if os.path.exists(info_json_file_path) and os.path.getsize(info_json_file_path) > 0:
                     with open(info_json_file_path, encoding="utf-8") as f:
                         task_info = json.load(f)
 
                 wav_path = task_info[uttid][uttid]['wav_path'] # permission issue
+                audio_file_name = os.path.basename(wav_path)
+                wav_path = os.path.join(self.audio_dir, uttid, audio_file_name)
 
                 # 2. get the alignment information by concurrent ASR systems
 
@@ -226,12 +262,16 @@ class GetTask(BaseReqHandler):
                 #         prompt = task_info[uttid][uttid]['prompt'].upper()
                 #         stt = k2_decoded_info_of_word['word']['text']
                 # except:
-                k2_decoded_info_of_phone = await k2call_for_phone(wav_path)
+                # k2_decoded_info_of_phone = await k2call_for_phone(wav_path)
                 phone_ctm_info = task_info[uttid][uttid]['ctm']
                 word_ctm_info = task_info[uttid][uttid]['word_ctm']
                 prompt = task_info[uttid][uttid]['prompt'].upper()
                 stt = call_nltk_api(task_info[uttid][uttid]['stt'])
-                    
+
+                if stt is None:
+                    tmp_stt = task_info[uttid][uttid]['stt']
+                    stt = remove_punctuation(tmp_stt).upper()
+
                 print(uttid)
 
                 # 2-2. by kaldi
@@ -245,9 +285,7 @@ class GetTask(BaseReqHandler):
                 #     stt,
                 #     k2_decoded_info_of_phone
                 # )
-                aligner_collect = self.handle_request(prompt, stt, k2_decoded_info_of_phone)
-
-                print(aligner_collect)
+                aligner_collect = self.handle_request(prompt, stt, None)
 
                 if not phone_score_annotations and apa_ret is not None:
                     max_length = len(aligner_collect['ref_phones_by_word'])
@@ -262,7 +300,7 @@ class GetTask(BaseReqHandler):
                         if apa_phone_seq == align_phone_seq:
                             phoneme_scores.extend(phoneme_score)
                         else:
-                            phoneme_scores.extend([{"phoneme": p, "accuracy_score": 1} for p in phone_seq_of_w_i])
+                            phoneme_scores.extend([{"phoneme": p, "accuracy_score": self.filler_default_number} for p in phone_seq_of_w_i])
 
                     iter_phone_seq = []
                     if len(aligner_collect['segment_ref_hyp_word_count_align']['ref_phones']) > len(aligner_collect['segment_ref_hyp_word_count_align']['hyp_phones']):
@@ -280,8 +318,10 @@ class GetTask(BaseReqHandler):
                                 'accuracy_score': self.rounding(phoneme_scores[cindex]['accuracy_score']),
                             }
                             cindex += 1  # Move to the next item in iter_phoneme_scores
+                        elif t in [""]:
+                            item = {"phoneme": "_", "accuracy_score": self.filler_default_number}
                         else:
-                            item = {"phoneme": "", "accuracy_score": 1}
+                            item = {"phoneme": "", "accuracy_score": self.filler_default_number}
                         phone_score_annotations += [item]
 
                 # 4. get GOPT predicted results
@@ -316,11 +356,14 @@ class GetTask(BaseReqHandler):
 
                 wav_binary = load_audio_to_binary(wav_path)
                 filename_without_extension = os.path.splitext(os.path.basename(wav_path))[0]
-                filename_without_extension = os.path.splitext(os.path.basename(wav_path))[0]
+                print('::::::::::::::::::', uttid)
 
+                print('phone_score_annotations: ', phone_score_annotations)
+                print('phone_score_annotations: ', len(phone_score_annotations))
                 resp["task"] = {
+                    "current_count": f"{len(self.application.settings[record]) + 1} / {(len(self.application.settings[tmp_wavs_key]) + len(self.application.settings[record]))}",
                     "feedback": "none",
-                    "visualization": "waveform",
+                    "visualization": "waveform", # invisible, spectrogram, waveform
                     "proximityTag": [],
                     "annotationTag": inventory,
                     "annotationTier": tier,
